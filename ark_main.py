@@ -11,7 +11,7 @@ from sybil_agent import SybilAgent
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
 # Use a specialized model for planning and another for synthesis
-PLANNER_MODEL = "deepseek-r1:8b-0528-qwen3-q8_0" 
+PLANNER_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0" 
 SYNTHESIZER_MODEL = "samantha-mistral:7b"
 
 # --- PROMPT ENGINEERING ---
