@@ -1,0 +1,141 @@
+import concurrent.futures
+import requests
+import json
+import logging
+import os
+import random # Used for simulation
+
+# --- Configuration ---
+OLLAMA_URL = "http://localhost:11434/api/generate"
+TIER_3_MODEL = "deepseek-r1:1.5b-qwen-distill-q8_0"
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def run_worker_agent(task_prompt: str) -> str:
+    """
+    Sends a task prompt to the TIER_3_MODEL via the Ollama API.
+
+    Args:
+        task_prompt: The prompt to send to the model.
+
+    Returns:
+        The model's response as a string.
+    """
+    try:
+        payload = {
+            "model": TIER_3_MODEL,
+            "prompt": task_prompt,
+            "stream": False
+        }
+        response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+        response.raise_for_status()
+
+        response_json = response.json()
+        if 'response' in response_json:
+            return response_json['response'].strip()
+        else:
+            return "Error: No 'response' field found in Ollama output."
+
+    except requests.exceptions.RequestException as e:
+        return f"Error communicating with Ollama: {e}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
+class ArchivistAgent:
+    """
+    A Tier 2 agent that orchestrates a crew of Tier 3 worker agents
+    specialized in managing the integrity and timeline of the vector database.
+    """
+    def __init__(self):
+        self.blackboard_path = "archivist_blackboard.md"
+
+    def _manage_blackboard(self, new_content: str):
+        """
+        Appends new content to the blackboard and truncates it to a maximum size.
+        """
+        max_size = 5000
+        
+        if os.path.exists(self.blackboard_path):
+            with open(self.blackboard_path, "r") as f:
+                existing_content = f.read()
+        else:
+            existing_content = ""
+
+        combined_content = existing_content + new_content
+
+        if len(combined_content) > max_size:
+            truncated_content = combined_content[-max_size:]
+        else:
+            truncated_content = combined_content
+        
+        with open(self.blackboard_path, "w") as f:
+            f.write(truncated_content)
+
+    def orchestrate_context_management(self, context_chunk: str) -> str:
+        """
+        Orchestrates the worker crew to manage a new context chunk.
+        This includes redundancy filtering and context appending.
+
+        Args:
+            context_chunk: The new piece of information to be managed.
+
+        Returns:
+            A final decision on how the context was handled.
+        """
+        # 1. Generate 5 prompt variations for analysis
+        task_prompts = [
+            f"Given the following new context, identify if it is highly similar to existing memories. Context: {context_chunk}",
+            f"Extract all unique information and key facts from this new context. Context: {context_chunk}",
+            f"Compare this context with existing memories and suggest where it might be appended. Context: {context_chunk}",
+            f"Evaluate if this new context represents a change in state or a new fact. Context: {context_chunk}",
+            f"If this is new information, suggest a concise entry for the vector database. Context: {context_chunk}"
+        ]
+
+        # 2. Launch the worker agents in parallel
+        raw_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_prompt = {executor.submit(run_worker_agent, prompt): prompt for prompt in task_prompts}
+            for future in concurrent.futures.as_completed(future_to_prompt):
+                try:
+                    result = future.result()
+                    raw_results.append(result)
+                except Exception as exc:
+                    raw_results.append(f"An exception occurred: {exc}")
+
+        # 3. Append raw results to the blackboard
+        new_blackboard_content = f"## Context Management: {context_chunk[:50]}...\n\n"
+        for i, result in enumerate(raw_results):
+            new_blackboard_content += f"### Worker {i+1} Analysis\n"
+            new_blackboard_content += f"{result}\n\n"
+        self._manage_blackboard(new_blackboard_content)
+
+        # 4. Synthesize a final decision
+        # --- This is a boilerplate simulation of the final decision logic ---
+        # A real implementation would use a model to make a decision based on the raw_results
+        # For this example, we'll simulate a decision based on a random chance
+        if random.random() > 0.5:
+            decision = f"Decision: The new context was deemed sufficiently unique and was added to the database as a new entry. It contained information that was not present in previous memories."
+        else:
+            decision = f"Decision: The new context was highly similar to an existing entry. The new information was appended to the older context to maintain the timeline and avoid redundancy."
+
+        return decision
+
+if __name__ == "__main__":
+    # --- Example Usage ---
+    archivist = ArchivistAgent()
+
+    # Example 1: New, unique context
+    print("--- Running Context Management on New Context ---")
+    new_context = "The primary purpose of the Chimaera is to act as an externalized executive function. The project is currently focused on building a hierarchical agentic architecture."
+    decision_1 = archivist.orchestrate_context_management(new_context)
+    print("Final Decision:")
+    print(decision_1)
+
+    print("\n" + "="*50 + "\n")
+
+    # Example 2: Context that is a revision of an old fact
+    print("--- Running Context Management on Revised Context ---")
+    revised_context = "The primary purpose of the Chimaera is to act as a symbiotic AI partner. The project has recently adopted a new model for its parallel workers: deepseek-r1."
+    decision_2 = archivist.orchestrate_context_management(revised_context)
+    print("Final Decision:")
+    print(decision_2)
