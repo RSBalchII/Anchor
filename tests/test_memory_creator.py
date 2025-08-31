@@ -1,7 +1,7 @@
 import pytest
 import uuid
 from datetime import datetime
-from chimaera.injector.memory_creator import create_memory_entry
+from injector.memory_creator import create_memory_entry
 
 def test_create_memory_entry_happy_path():
     content = "This is some test content."

@@ -14,13 +14,15 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 # We install vllm first as it has complex dependencies
 RUN pip install vllm
 
-# Copy our project's requirements file
+# Install and initialize UV
+RUN pip install "uv>=0.1.30" && \
+    mkdir -p /opt/uv && \
+    uv init --root /opt/uv
+
+# Install Python dependencies from requirements.txt
 COPY requirements.txt .
-
-# Install the rest of our project dependencies using UV
-RUN pip install "uv>=0.1.30"
-RUN uv pip install -r requirements.txt
-
+RUN pip install --no-cache-dir -r requirements.txt
+    
 # Set the working directory inside the container
 WORKDIR /app
 

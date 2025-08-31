@@ -7,11 +7,12 @@ import json
 import logging
 import os
 import random  # Used for simulation
-import graphr1
+# import graphr1
 import uuid
 from tools.blackboard import Blackboard
 from tools.file_io import read_last_n_chars, write_and_truncate
 from config import TIER_2_WORKER_MODEL
+from tools.graph_db import GraphDB
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -57,7 +58,8 @@ class ArchivistAgent:
     def __init__(self):
         self.blackboard_path = "archivist_blackboard.md"
         # Initialize ChromaDB client
-        self.graph_client = graphr1.Client()
+        # self.graph_client = graphr1.Client()
+        self.graph_db = GraphDB()
         self.blackboard = Blackboard()
         # self.memory_archive = self.chroma_client.get_or_create_collection(name="memory_archive") # TODO: Replace with GraphR1 equivalent
 
@@ -66,6 +68,13 @@ class ArchivistAgent:
         Appends new content to the blackboard and truncates it to a maximum size.
         """
         write_and_truncate(self.blackboard_path, new_content, max_size)
+
+    def add_memory_node(self, content: str):
+        """
+        Adds a new memory node to the graph database.
+        """
+        query = "CREATE (m:Memory {content: $content, timestamp: timestamp()})"
+        self.graph_db.query(query, {"content": content})
 
     def orchestrate_context_management(self, context_chunk: str) -> str:
         """
@@ -99,10 +108,10 @@ class ArchivistAgent:
                     raw_results.append(f"An exception occurred: {exc}")
 
         # 3. Append raw results to the blackboard
-        new_blackboard_content = f"## Context Management: {context_chunk[:50]}...\n\n"
+        new_blackboard_content = f"## Context Management: {context_chunk[:50]}...\r\n\r\n"
         for i, result in enumerate(raw_results):
-            new_blackboard_content += f"### Worker {i+1} Analysis\n"
-            new_blackboard_content += f"{result}\n\n"
+            new_blackboard_content += f"### Worker {i+1} Analysis\r\n"
+            new_blackboard_content += f"{result}\r\n\r\n"
         self._manage_blackboard(new_blackboard_content)
 
         # 4. Synthesize a final decision
@@ -125,8 +134,8 @@ class ArchivistAgent:
         """
         try:
             doc_id = str(uuid.uuid4())
-            self.graph_client.nodes.create(id=doc_id, label='ConceptNode', properties={'text': text_chunk, 'source': 'archivist_agent'})
-            print(f"Archived chunk of {len(text_chunk)} characters.")
+            # self.graph_client.nodes.create(id=doc_id, label='ConceptNode', properties={'text': text_chunk, 'source': 'archivist_agent'})
+            print(f"Archived chunk of {len(text_chunk)} characters (GraphR1 call disabled).")
             self.blackboard.post_message(source_agent='ArchivistAgent', content=f'Archived chunk of {len(text_chunk)} characters.')
         except Exception as e:
             print(f"Error archiving memory chunk: {e}")
@@ -142,7 +151,7 @@ class ArchivistAgent:
         
         if content_to_archive:
             # Archive the content using the existing method
-            self.archive_memory_chunk(content_to_archive)
+            self.add_memory_node("Archiving new memory.")
             print("Successfully archived content from working memory.")
         else:
             print("Working memory file is empty or could not be read. Nothing to archive.")
@@ -158,12 +167,14 @@ class ArchivistAgent:
         Returns:
             A list of dictionaries, where each dictionary contains the properties of a matching node.
         """
-        try:
-            results = self.graph_client.nodes.search(label='ConceptNode', query=query_text, top_k=top_k)
-            return [node.properties for node in results]
-        except Exception as e:
-            print(f"Error querying memory archive: {e}")
-            return []
+        print("Warning: GraphR1 not implemented. Returning empty list.")
+        return []
+        # try:
+        #     results = self.graph_client.nodes.search(label='ConceptNode', query=query_text, top_k=top_k)
+        #     return [node.properties for node in results]
+        # except Exception as e:
+        #     print(f"Error querying memory archive: {e}")
+        #     return []
 
 if __name__ == "__main__":
     # --- Example Usage ---
@@ -176,7 +187,7 @@ if __name__ == "__main__":
     print("Final Decision:")
     print(decision_1)
 
-    print("\n" + "="*50 + "\n")
+    print("\r\n" + "="*50 + "\r\n")
 
     # Example 2: Context that is a revision of an old fact
     print("--- Running Context Management on Revised Context ---")
@@ -185,7 +196,7 @@ if __name__ == "__main__":
     print("Final Decision:")
     print(decision_2)
 
-    print("\n" + "="*50 + "\n")
+    print("\r\n" + "="*50 + "\r\n")
 
     # --- Test Archiving ---
     print("--- Testing Memory Archival ---")

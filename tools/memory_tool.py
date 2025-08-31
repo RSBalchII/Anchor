@@ -1,6 +1,4 @@
-
-
-import graphr1
+# import graphr1
 # from sentence_transformers import SentenceTransformer
 import uuid
 import logging
@@ -10,13 +8,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # --- Initialize GraphR1 Client (Singleton pattern) ---
 # This ensures we only initialize this object once.
-try:
-    graph_client = graphr1.Client()
-    logging.info("Successfully connected to GraphR1 client.")
-
-except Exception as e:
-    logging.error(f"Failed to initialize GraphR1 client: {e}")
-    graph_client = None
+# try:
+#     graph_client = graphr1.Client()
+#     logging.info("Successfully connected to GraphR1 client.")
+# 
+# except Exception as e:
+#     logging.error(f"Failed to initialize GraphR1 client: {e}")
+graph_client = None
 
 # --- Tool Functions ---
 
