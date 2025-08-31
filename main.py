@@ -14,7 +14,7 @@ from tools.file_io import append_to_file
 from agents.distiller_agent import DistillerAgent
 from tools.blackboard import Blackboard
 from agents.orchestrator import AgentOrchestrator
-from poml import POMLLoader
+# from poml import POMLLoader
 import threading
 from config import STRATEGIST_MODEL, LOCUS_MODEL, MAIN_CONTEXT_FILE
 
@@ -136,8 +136,6 @@ def process_user_request(user_input, agent, memory_manager):
             final_answer = call_ollama(synthesis_prompt, model_name=SYNTHESIZER_MODEL)
             append_to_file(MAIN_CONTEXT_FILE, f"Coda: {final_answer}\n")
             print(f"Coda: {final_answer}")
-            distiller = DistillerAgent()
-            distiller.orchestrate_distillation_crew(context_to_distill=f"""User Input: {user_input}\nCoda's Response: {final_answer}""")
             return # Exit early for simple conversational queries
 
         # If the query is complex, proceed with planning and execution.
@@ -147,8 +145,10 @@ def process_user_request(user_input, agent, memory_manager):
         # 1. Planning Phase
         print("Coda is planning...")
         scratchpad = memory_manager.get_context()
-        poml_loader = POMLLoader()
-        planner_prompt = poml_loader.load("prompts/planner.poml", user_input=user_input)
+        # poml_loader = POMLLoader()
+        # planner_prompt = poml_loader.load("prompts/planner.poml", user_input=user_input)
+        # For now, we will use a simple planner prompt
+        planner_prompt = f"Create a plan to address the following user request: {user_input}"
         raw_plan_output = call_ollama(planner_prompt, model_name=planner_model)
         
         plan_json_str = extract_json_from_response(raw_plan_output)
@@ -185,18 +185,17 @@ def process_user_request(user_input, agent, memory_manager):
 
         # 3. Synthesis Phase
         print("Coda is synthesizing the results...")
-        synthesis_prompt = poml_loader.load(
-            "prompts/synthesis.poml",
-            user_input=user_input,
-            tool_outputs=json.dumps(tool_outputs, indent=2)
-        )
+        # synthesis_prompt = poml_loader.load(
+        #     "prompts/synthesis.poml",
+        #     user_input=user_input,
+        #     tool_outputs=json.dumps(tool_outputs, indent=2)
+        # )
+        synthesis_prompt = f"Based on the following tool outputs, synthesize a response to the user request: '{user_input}'\n\n{json.dumps(tool_outputs, indent=2)}"
         final_answer = call_ollama(synthesis_prompt, model_name=SYNTHESIZER_MODEL)
         memory_manager.add_entry(thought=None, action=None, observation=final_answer)
         append_to_file(MAIN_CONTEXT_FILE, f"Coda: {final_answer}\n")
         print(f"Coda: {final_answer}")
-        distiller = DistillerAgent()
-        distiller.orchestrate_distillation_crew(context_to_distill=f"""User Input: {user_input}
-Coda's Response: {final_answer}""")
+        
 
     except Exception as e:
         print(f"Coda: I encountered an error. Error: {e}")
@@ -258,4 +257,7 @@ if __name__ == "__main__":
     orchestrator = AgentOrchestrator()
     orchestrator_thread = threading.Thread(target=orchestrator.start, daemon=True)
     orchestrator_thread.start()
-    run_ark()
+    try:
+        run_ark()
+    finally:
+        orchestrator.stop()

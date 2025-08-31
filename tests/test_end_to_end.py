@@ -4,13 +4,13 @@ import builtins
 import io
 
 # Import the functions from ark_main.py that we need to test or mock
-from ark_main import run_ark, process_user_request, run_strategist_synthesis, call_ollama
+from main import run_ark, process_user_request, run_strategist_synthesis, call_ollama
 from config import STRATEGIST_MODEL, LOCUS_MODEL, MAIN_CONTEXT_FILE
 
 # Mock the append_to_file function to prevent actual file writes during tests
 @pytest.fixture(autouse=True)
 def mock_append_to_file():
-    with patch('ark_main.append_to_file') as mock_func:
+    with patch('main.append_to_file') as mock_func:
         yield mock_func
 
 # Mock the Blackboard to prevent Redis interactions during tests
@@ -31,7 +31,7 @@ def mock_orchestrator():
 # Mock the DistillerAgent to prevent its crew orchestration
 @pytest.fixture(autouse=True)
 def mock_distiller_agent():
-    with patch('ark_main.DistillerAgent') as mock_dist_class:
+    with patch('main.DistillerAgent') as mock_dist_class:
         mock_instance = MagicMock()
         mock_dist_class.return_value = mock_instance
         yield mock_instance
