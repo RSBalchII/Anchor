@@ -6,7 +6,7 @@
 llm:
   provider: ollama
   config:
-    model: "deepseek-r1:14b-qwen-distill-q4_K_M"
+    model: "mistral-nemo:12b-instruct-2407-q8_0"
 
 # === Agent Definitions ===
 

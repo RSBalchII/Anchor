@@ -2,17 +2,17 @@ services:
   chimaera-dev:
     # Build the image from the Dockerfile in the current directory
     build:
-      context: C:\Users\rsbiiw\Projects\External-Context-Engine-ECE
+      context: .
     # Keep the container running and allow for interactive sessions
     tty: true
     stdin_open: true
     volumes:
       # Mount the entire local project directory to /app in the container
       # This means changes you make on your host machine are instantly reflected in the container
-      - C:\Users\rsbiiw\Projects\External-Context-Engine-ECE:/app
-      # Mount your models directory from the host to /models in the container
-      # IMPORTANT: You MUST change 'C:pathonhosttomodels' to the actual path where you store your LLM files.
-      - /c/Users/rsbiiw/models:/models
+      - .:/app
+      # Mount Ollama's model directory from the host to /models in the container
+      # Using Ollama's default model storage location on Linux
+      - ~/.ollama/models:/models
     deploy:
       resources:
         reservations:

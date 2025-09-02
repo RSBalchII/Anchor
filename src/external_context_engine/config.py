@@ -1,17 +1,17 @@
-# T3 - The Apex model for high-level synthesis
-STRATEGIST_MODEL = 'deepseek-coder-v2:16b-lite-instruct-q4_0'
+# Orchestrator - The main orchestrator model for high-level coordination
+STRATEGIST_MODEL = 'mistral-nemo:12b-instruct-2407-q8_0'
 
 # User-Facing - The fast and responsive model for the main loop
-LOCUS_MODEL = 'deepseek-coder-v2:16b-lite-instruct-q4_0'
+LOCUS_MODEL = 'nemotron-mini:4b-instruct-q8_0'
 
 # Specialist Tool - The powerful coder model, loaded on demand
-CODER_MODEL = 'deepseek-coder-v2:16b-lite-instruct-fp16'
+CODER_MODEL = 'mistral-nemo:12b-instruct-2407-q8_0'
 
 # T2 - The lightweight model for background agents
-TIER_2_WORKER_MODEL = 'deepseek-coder-v2:16b-lite-instruct-q4_0'
+TIER_2_WORKER_MODEL = 'nemotron-mini:4b-instruct-q8_0'
 
 # T1 - The lightweight model for scouting
-TIER_1_SCOUT_MODEL = 'deepseek-coder-v2:16b-lite-instruct-q4_0'
+TIER_1_SCOUT_MODEL = 'nemotron-mini:4b-instruct-q8_0'
 
 # System
 MAIN_CONTEXT_FILE = 'main_context.md'
