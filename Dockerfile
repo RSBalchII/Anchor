@@ -1,6 +1,7 @@
-# Use an official NVIDIA CUDA image as a base
-FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
+# Use an official Python runtime as the base image
+FROM python:3.10
 
+<<<<<<< HEAD
 # Set non-interactive frontend for package installers
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,8 +23,29 @@ COPY requirements.txt .
 RUN uv pip install --no-cache-dir -r requirements.txt --system
     
 # Set the working directory inside the container
+=======
+# Set the working directory in the container
+>>>>>>> 8bb7675114549940f808f7d6ac277471255febc5
 WORKDIR /app
 
-# By default, copy the current project code into the container
-# This is mainly for building the image, the volume mount will override this at runtime
+# Install build tools and dependencies
+RUN apt-get update && apt-get install -y \
+    libffi-dev \
+    libssl-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements.txt into the container
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
 COPY . .
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Define the command to run the application with uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ChromaDB data
 chroma_db_data/
 
@@ -12,3 +13,5 @@ docker-compose.override.yml
 
 .venv/*
 .venv
+=======
+>>>>>>> 8bb7675114549940f808f7d6ac277471255febc5
