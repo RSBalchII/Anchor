@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ChromaDB data
 chroma_db_data/
 
@@ -9,4 +10,8 @@ __pycache__/
 
 # Docker
 docker-compose.override.yml
-**/Dockerfile
+
+.venv/*
+.venv
+=======
+>>>>>>> 8bb7675114549940f808f7d6ac277471255febc5
