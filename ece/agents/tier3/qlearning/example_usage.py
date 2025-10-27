@@ -17,9 +17,9 @@ async def main():
     print("=" * 30)
     
     # Get Neo4j connection details from environment variables, with defaults for local development
-    neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7688')
+    neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
     neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-    neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+    neo4j_password = os.environ.get('NEO4J_PASSWORD', 'ECE_secure_password_2025')
     
     # Create Neo4j manager
     neo4j_manager = Neo4jManager(neo4j_uri, neo4j_user, neo4j_password)

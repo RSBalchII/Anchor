@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "DistillerAgent",
+    "description": "",
+    "author": "",
+    "tags": [],
+    "type": "Specialist Agent"
+  },
+  "components": [
+    {
+      "type": "task",
+      "attributes": {
+        "priority": "0"
+      },
+      "content": "Distill raw text into structured, meaningful data for storage in the knowledge graph."
+    }
+  ],
+  "stylesheets": []
+}

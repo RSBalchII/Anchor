@@ -3,7 +3,8 @@ Enhanced Orchestrator Agent with prompt management and stability improvements.
 """
 
 import os
-import httpx
+import subprocess
+import aiohttp
 import asyncio
 import yaml
 import traceback
@@ -12,6 +13,7 @@ from typing import Optional, Dict, Any, List
 from xml.etree import ElementTree as ET
 from urllib.parse import urlparse
 import json
+import time
 
 from ece.agents.tier2.conversational_agent import ConversationalAgent
 from ece.agents.tier2.explorer_agent import ExplorerAgent
@@ -21,526 +23,708 @@ from ece.common.sandbox import run_code_in_sandbox
 from ece.components.context_cache.cache_manager import CacheManager
 from ece.agents.tier1.orchestrator.archivist_client import ArchivistClient
 from ece.common.prompt_manager import PromptManager, PromptConfig
+from ece.common.logging_config import get_logger
 from utcp.utcp_client import UtcpClient
 from utcp.data.tool import Tool
 from ece.agents.common.trm_client import TRMClient, TRMConfig
-from ece.agents.common.markovian_thinker import MarkovianThinker, MarkovianConfig, ReasoningAnalyzer
-from ece.agents.common.coordination_analyzer import ThinkerCoordinator
+from ece.agents.common.markovian_thinker import (
+    MarkovianThinker,
+    MarkovianConfig,
+    ReasoningAnalyzer,
+)
+from ece.agents.common.model_loader import PersonaLoader, ContextSequenceManager, ModelManager
+# Removed ThinkerCoordinator as it's no longer used since parallel thinking was replaced with tool usage
 
 # Set up logging for the orchestrator
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger('orchestrator')
 
 
-class BaseThinker:
-    def __init__(self, name="Default", model=None, semaphore: asyncio.Semaphore = None, api_base: str = None, role_description: str = None):
-        self.name = name
-        self.model = model
-        self.semaphore = semaphore
-        self.api_base = api_base
-        self.role_description = role_description or f"General thinker with perspective: {self.name}"
-        
-        # Assign persona based on name
-        coordinator = ThinkerCoordinator()
-        personas = coordinator.assign_thinker_personas()
-        self.persona = personas.get(name, f"You are a helpful AI assistant acting as the '{self.name}' Thinker. Provide a concise analysis from this specific perspective.")
-        
-        self.system_prompt = self.persona
+# Removed BaseThinker and SynthesisThinker classes as they were part of the deprecated parallel thinking approach
+# The system now uses direct model calls and tool usage instead of parallel thinking with multiple thinkers
 
-    async def think(self, prompt: str, other_thinkers_info: List[Dict[str, str]] = None) -> str:
-        """
-        Enhanced thinking method that includes ToM considerations.
-        """
-        if not self.semaphore:
-            raise ValueError("Semaphore not provided to BaseThinker")
-
-        # Generate ToM instructions if other thinkers are available
-        to_m_instruction = ""
-        if other_thinkers_info:
-            coordinator = ThinkerCoordinator()
-            to_m_instruction = coordinator.generate_thinker_instructions(self.name, other_thinkers_info)
-            prompt = f"{to_m_instruction}\n\n{prompt}"
-
-        async with self.semaphore:
-            # Prepare the messages for API call
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-            
-            try:
-                # Make an async request to the configured LLM API
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        f"{self.api_base}/chat/completions",
-                        json={
-                            "model": self.model,
-                            "messages": messages,
-                            "max_tokens": 1024,
-                            "temperature": 0.7
-                        }
-                    )
-                    
-                    # Check if the request was successful
-                    if response.status_code == 200:
-                        data = response.json()
-                        
-                        # Extract the generated text
-                        if "choices" in data and len(data["choices"]) > 0:
-                            generated_text = data["choices"][0]["message"]["content"]
-                            return generated_text
-                        else:
-                            raise Exception(f"Unexpected response format: {data}")
-                    else:
-                        raise Exception(f"API call failed with status {response.status_code}: {response.text}")
-            except Exception as e:
-                logger.error(f"Error in thinker {self.name}: {str(e)}")
-                return f"Error in {self.name} thinking: {str(e)}"
-
-
-class SynthesisThinker(BaseThinker):
-    def __init__(self, name="Synthesis", model=None, semaphore: asyncio.Semaphore = None, api_base: str = None, role_description: str = None):
-        role_desc = role_description or "Combines insights from various specialized thinkers into a coherent, comprehensive response that addresses the original query while maintaining logical flow and internal consistency"
-        super().__init__(name, model, semaphore, api_base, role_desc)
-        self.system_prompt = "You are a Synthesis Thinker. Your role is to combine insights from various specialized thinkers into a coherent, comprehensive response that addresses the original query while maintaining logical flow and internal consistency."
-
-
-def get_all_thinkers(config, semaphore, api_base):
-    thinker_model = config.get('ThinkerAgent', {}).get('model')
-    thinker_personas = config.get('ThinkerAgent', {}).get('personas', [])
-    
-    # If no personas are defined in config, use default personas
-    if not thinker_personas:
-        coordinator = ThinkerCoordinator()
-        default_personas = coordinator.assign_thinker_personas()
-        
-        for name, persona_desc in default_personas.items():
-            thinker_personas.append({
-                'name': name.replace('Thinker', ''),  # Remove 'Thinker' suffix for config
-                'system_prompt': persona_desc
-            })
-
-    thinkers = []
-    for persona in thinker_personas:
-        name = persona.get('name', 'Default')
-        model = persona.get('model', thinker_model)
-        system_prompt = persona.get('system_prompt', f"You are a helpful AI assistant acting as the '{name}' Thinker. Provide a concise analysis from this specific perspective.")
-        
-        # Properly handle the role description
-        role_description = system_prompt.split('.')[0] if system_prompt else f"General {name} thinker"
-        
-        thinker = BaseThinker(
-            name=name, 
-            model=model, 
-            semaphore=semaphore, 
-            api_base=api_base,
-            role_description=role_description
-        )
-        thinker.system_prompt = system_prompt
-        thinkers.append(thinker)
-    
-    return thinkers
+# Removed get_all_thinkers function as it was part of the deprecated parallel thinking approach
+# The system now uses direct model calls and tool usage instead of parallel thinking with multiple thinkers
 
 
 class EnhancedOrchestratorAgent:
     """
     Enhanced Orchestrator Agent with improved prompt management and stability features.
     """
-    def __init__(self, session_id: str, config_path: str = 'config.yaml'):
-        # Load configuration
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
 
-        # Initialize prompt manager for context overflow prevention
-        llm_config = self.config.get('llm', {})
-        provider_config = llm_config.get('providers', {}).get(llm_config.get('active_provider', 'ollama'), {})
-        
-        # Set max_tokens based on provider configuration
-        max_tokens = 32768  # Default value
-        if 'llama_cpp' in provider_config:
-            # For llama.cpp, we might have specific context size in config
-            max_tokens = 131072  # 128k as configured in our setup
-        
-        prompt_config = PromptConfig(
-            max_tokens=max_tokens,
-            reserved_tokens=1000,
-            strategy="intelligent"
-        )
-        self.prompt_manager = PromptManager(prompt_config)
-        
-        self.session_id = session_id
-        self.llm_semaphore = asyncio.Semaphore(1)
-        
-        # --- REFACTORED: Initialize agents based on the new config.yaml structure ---
-        llm_config = self.config.get('llm', {})
-        active_provider = llm_config.get('active_provider', 'ollama')
-        provider_config = llm_config.get('providers', {}).get(active_provider, {})
-        
-        llm_model = provider_config.get('model', provider_config.get('model_path', 'default-model'))
-        api_base = provider_config.get('api_base', 'http://localhost:11434/v1')
-        
-        synthesis_model = self.config.get('ThinkerAgent', {}).get('synthesis_model', llm_model)
-        
-        self.thinkers = get_all_thinkers(self.config, self.llm_semaphore, api_base)
-        self.synthesis_thinker = SynthesisThinker(model=synthesis_model, semaphore=self.llm_semaphore, api_base=api_base)
+    def __init__(self, session_id: str, config_path: str = "config.yaml"):
+        print(f"DEBUG: Initializing EnhancedOrchestratorAgent with session_id: {session_id}")
+        try:
+            with open(config_path, "r") as f:
+                self.config = yaml.safe_load(f)
+            print("DEBUG: Loaded config successfully")
 
-        # Initialize other components
-        archivist_url = self.config.get('archivist', {}).get('url', 'http://localhost:8003')
-        self.archivist_client = ArchivistClient(base_url=archivist_url)
-        self.cache_manager = CacheManager()
-        
-        # Store UTCP config for later initialization
-        utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://localhost:8005")
-        self.utcp_config = {
-            "manual_call_templates": [{
-                "name": "utcp_registry",
-                "call_template_type": "http",
-                "url": f"{utcp_registry_url}/utcp"  # Standard UTCP discovery endpoint
-            }]
-        }
-        self.utcp_client = None  # Will be initialized when needed
+            llm_config = self.config.get("llm", {})
+            provider_config = llm_config.get("providers", {}).get(
+                llm_config.get("active_provider", "ollama"), {}
+            )
+            print(f"DEBUG: Provider config: {provider_config}")
 
-        # Initialize TRM Client and Markovian Thinker
-        trm_config = TRMConfig(
-            api_base="http://localhost:8081/v1",  # Default TRM API base
-            model="jamba-reasoning-3b-F16.gguf"   # TRM model
-        )
-        self.trm_client = TRMClient(trm_config)
-        
-        # Initialize Markovian Thinker with appropriate configuration
-        markovian_config = MarkovianConfig(
-            thinking_context_size=8192,  # 8K tokens per chunk
-            markovian_state_size=4096,   # 4K tokens for carryover state
-            iteration_cap=5,             # Max 5 chunks (allowing up to ~24K tokens total)
-            temperature=0.6,             # Moderate temperature for consistency
-            api_base=api_base,           # Use the same API base as other models
-            model=llm_model              # Use the same model as configured
-        )
-        self.markovian_thinker = MarkovianThinker(markovian_config)
+            self.max_tokens = 32768
+            # Safely check if provider_config is not None and contains "llama_cpp"
+            if provider_config and "llama_cpp" in provider_config:
+                self.max_tokens = 131072
+            self.temperature = provider_config.get("temperature", 0.7) if provider_config else 0.7
+            print(f"DEBUG: Max tokens: {self.max_tokens}, Temperature: {self.temperature}")
 
-        # Initialize logger
-        self.logger = logging.getLogger(__name__)
+            prompt_config = PromptConfig(
+                max_tokens=self.max_tokens, reserved_tokens=1000, strategy="intelligent"
+            )
+            self.prompt_manager = PromptManager(prompt_config)
+            print("DEBUG: Initialized prompt manager")
+
+            self.session_id = session_id
+            self.llm_semaphore = asyncio.Semaphore(1)
+            print("DEBUG: Initialized session and semaphore")
+
+            llm_config = self.config.get("llm", {})
+            active_provider = llm_config.get("active_provider", "ollama")
+            provider_config = llm_config.get("providers", {}).get(active_provider, {})
+            print(f"DEBUG: Active provider: {active_provider}")
+
+            llm_model = provider_config.get(
+                "model", provider_config.get("model_path", "default-model")
+            )
+            api_base = provider_config.get("api_base", "http://localhost:11434/v1")
+            print(f"DEBUG: LLM model: {llm_model}, API base: {api_base}")
+
+            synthesis_model = self.config.get("ThinkerAgent", {}).get(
+                "synthesis_model", llm_model
+            )
+            print(f"DEBUG: Synthesis model: {synthesis_model}")
+
+            # Create a single, shared aiohttp.ClientSession
+            timeout = aiohttp.ClientTimeout(total=300)
+            self.http_client = aiohttp.ClientSession(timeout=timeout)
+            print("DEBUG: Initialized HTTP client")
+
+            # Note: Parallel thinking infrastructure has been removed in favor of direct model calls and tool usage
+            # The thinkers and synthesis_thinker are no longer needed in the main processing flow
+            print("DEBUG: Skipping parallel thinking initialization (deprecated in favor of direct model calls and tools)")
+
+            archivist_url = self.config.get("archivist", {}).get(
+                "url", "http://localhost:8003"
+            )
+            self.archivist_client = ArchivistClient(base_url=archivist_url)
+            print(f"DEBUG: Initialized archivist client with URL: {archivist_url}")
+
+            self.cache_manager = CacheManager()
+            print("DEBUG: Initialized cache manager")
+
+            # Configure UTCP for decentralized approach - each service serves its own UTCP manual
+            self.utcp_config = {
+                "manual_call_templates": [
+                    {
+                        "name": "distiller_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8001/utcp",
+                    },
+                    {
+                        "name": "qlearning_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8002/utcp",
+                    },
+                    {
+                        "name": "archivist_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8003/utcp",
+                    },
+                    {
+                        "name": "injector_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8004/utcp",
+                    },
+                    {
+                        "name": "filesystem_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8006/utcp",
+                    },
+                    {
+                        "name": "websearch_utcp",
+                        "call_template_type": "http",
+                        "url": "http://localhost:8007/utcp",
+                    }
+                ]
+            }
+            self.utcp_client = None
+            print("DEBUG: Initialized UTCP config with decentralized endpoints")
+
+            trm_config = TRMConfig(
+                api_base=api_base,  # Use the same API base as the main LLM
+                model=llm_model,    # Use the same model as the main LLM
+            )
+            self.trm_client = TRMClient(trm_config)
+            print("DEBUG: Initialized TRM client")
+
+            markovian_config = MarkovianConfig(
+                thinking_context_size=8192,
+                markovian_state_size=4096,
+                iteration_cap=5,
+                temperature=0.6,
+                api_base=api_base,
+                model=llm_model,
+            )
+            self.markovian_thinker = MarkovianThinker(markovian_config)
+            print("DEBUG: Initialized Markovian thinker")
+
+            # Initialize model manager for on-demand model starting/stopping
+            api_base = provider_config.get("api_base", "http://localhost:8080/v1")
+            self.model_manager = ModelManager(api_base)
+            print("DEBUG: Initialized model manager for on-demand model handling")
+            print(f"DEBUG: Model manager configured with API base: {api_base}")
+
+            # Initialize persona loader and context sequence manager for correct loading order
+            self.persona_loader = PersonaLoader()
+            self.context_manager = ContextSequenceManager(
+                redis_client=self.cache_manager.redis_client, 
+                persona_loader=self.persona_loader
+            )
+            print("DEBUG: Initialized persona loader and context sequence manager")
+
+            self.logger = logging.getLogger(__name__)
+            print("DEBUG: EnhancedOrchestratorAgent initialized successfully")
+        except Exception as e:
+            import traceback
+            error_details = f"Error initializing EnhancedOrchestratorAgent: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+            print(error_details)
+            raise
 
     async def process_prompt_with_context_management(self, user_prompt: str) -> str:
-        """
-        Process a prompt using context-aware management to prevent overflow.
-        This method now implements the Markovian Thinking paradigm for complex prompts
-        while falling back to parallel thinking for simpler ones.
-        """
         try:
-            # Analyze the prompt to decide which reasoning approach to use
-            if ReasoningAnalyzer.should_use_markovian_thinking(user_prompt):
+            # Analyze intent to determine if tools are needed
+            tool_intent = self._analyze_intent_for_tools(user_prompt)
+            
+            if tool_intent["needs_tools"]:
+                # Process with tools based on intent
+                tool_results = []
+                
+                if tool_intent["filesystem"]:
+                    self.logger.info("Detected need for filesystem operations")
+                    try:
+                        fs_result = await self.handle_filesystem_request()
+                        tool_results.append({"type": "filesystem", "result": fs_result})
+                    except Exception as e:
+                        self.logger.error(f"Error in filesystem tool call: {e}")
+                        tool_results.append({"type": "filesystem", "error": str(e)})
+                
+                if tool_intent["web_search"]:
+                    self.logger.info("Detected need for web search operations")
+                    try:
+                        web_result = await self.handle_web_search_request(user_prompt)
+                        tool_results.append({"type": "web_search", "result": web_result})
+                    except Exception as e:
+                        self.logger.error(f"Error in web search tool call: {e}")
+                        tool_results.append({"type": "web_search", "error": str(e)})
+                
+                # Load complete context following the correct sequence using ContextSequenceManager
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=tool_results,
+                    session_id=self.session_id
+                )
+                
+                # Get the final response based on complete context
+                result = await self.direct_model_response(complete_context)
+                
+                # Format the response
+                final_output = {
+                    "intermediate_steps": tool_results,
+                    "synthesis_prompt": complete_context,
+                    "final_response": result,
+                }
+                return json.dumps(final_output, indent=2)
+            
+            elif ReasoningAnalyzer.should_use_markovian_thinking(user_prompt):
                 self.logger.info("Using Markovian thinking for complex reasoning")
                 return await self._process_with_markovian_thinking(user_prompt)
             else:
-                self.logger.info("Using parallel thinking for simpler reasoning")
-                # Get context from the knowledge graph via archivist
-                context = await self.archivist_client.query_memory(user_prompt)
+                self.logger.info("Using direct model response for simpler reasoning")
                 
-                # Use prompt manager to prepare the prompt safely
-                prepared_prompt = self.prompt_manager.prepare_prompt(user_prompt, context)
+                # Load complete context following the correct sequence
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=None,
+                    session_id=self.session_id
+                )
                 
-                # Log context usage stats
-                stats = self.prompt_manager.get_context_usage_stats(prepared_prompt)
+                stats = self.prompt_manager.get_context_usage_stats(complete_context)
                 self.logger.info(f"Context usage stats: {json.dumps(stats, indent=2)}")
-                
                 if stats["over_limit"]:
-                    self.logger.warning(f"Prompt was adjusted due to context overflow: {stats}")
+                    self.logger.warning(
+                        f"Prompt was adjusted due to context overflow: {stats}"
+                    )
                 
-                # Process the prepared prompt with parallel thinking
-                result = await self.parallel_thinking(prepared_prompt)
-                return result
-                
+                # Use a direct model call instead of parallel thinking
+                result = await self.direct_model_response(complete_context)
+                # Format the response in the same structure as before for compatibility
+                final_output = {
+                    "intermediate_steps": [],
+                    "synthesis_prompt": complete_context,
+                    "final_response": result,
+                }
+                return json.dumps(final_output, indent=2)
         except Exception as e:
             self.logger.error(f"Error in process_prompt_with_context_management: {e}")
             self.logger.error(traceback.format_exc())
             return f"Error processing prompt: {str(e)}"
-    
+
     async def _process_with_markovian_thinking(self, user_prompt: str) -> str:
-        """
-        Process a prompt using the Markovian Thinking paradigm as described in the research paper.
-        This enables extremely long and complete reasoning by using fixed-size chunks
-        with textual carryover state between chunks.
-        """
         try:
-            # Get context from the knowledge graph via archivist
-            context = await self.archivist_client.query_memory(user_prompt)
+            # Analyze intent to determine if tools are needed even in Markovian thinking
+            tool_intent = self._analyze_intent_for_tools(user_prompt)
             
-            # Use the Markovian Thinker to process the prompt with chunked reasoning
-            result = await self.markovian_thinker.markovian_reasoning_loop(
-                initial_query=user_prompt,
-                context=context
-            )
-            
-            # Store the result in the cache for future reference
-            self.cache_manager.store(f"{self.session_id}:markovian_result", result)
-            
-            self.logger.info(f"Markovian reasoning completed, result length: {len(result)} characters")
-            return result
-            
+            if tool_intent["needs_tools"]:
+                # Process with tools first, even in Markovian mode
+                tool_results = []
+                
+                if tool_intent["filesystem"]:
+                    self.logger.info("Detected need for filesystem operations in Markovian thinking")
+                    try:
+                        fs_result = await self.handle_filesystem_request()
+                        tool_results.append({"type": "filesystem", "result": fs_result})
+                    except Exception as e:
+                        self.logger.error(f"Error in filesystem tool call during Markovian thinking: {e}")
+                        tool_results.append({"type": "filesystem", "error": str(e)})
+                
+                if tool_intent["web_search"]:
+                    self.logger.info("Detected need for web search operations in Markovian thinking")
+                    try:
+                        web_result = await self.handle_web_search_request(user_prompt)
+                        tool_results.append({"type": "web_search", "result": web_result})
+                    except Exception as e:
+                        self.logger.error(f"Error in web search tool call during Markovian thinking: {e}")
+                        tool_results.append({"type": "web_search", "error": str(e)})
+                
+                # Load complete context with tools following the correct sequence
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=tool_results,
+                    session_id=self.session_id
+                )
+                
+                # Perform Markovian reasoning with complete context
+                result = await self.markovian_thinker.markovian_reasoning_loop(
+                    initial_query=user_prompt, context=complete_context
+                )
+                
+                self.cache_manager.store(f"{self.session_id}:markovian_result", result)
+                self.logger.info(
+                    f"Markovian reasoning completed with tools, result length: {len(result)} characters"
+                )
+                
+                # Format the response to include tool results
+                final_output = {
+                    "intermediate_steps": tool_results,
+                    "synthesis_prompt": complete_context,
+                    "final_response": result,
+                }
+                return json.dumps(final_output, indent=2)
+            else:
+                # Standard Markovian thinking without tools but with complete context sequence
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=None,
+                    session_id=self.session_id
+                )
+                
+                result = await self.markovian_thinker.markovian_reasoning_loop(
+                    initial_query=user_prompt, context=complete_context
+                )
+                self.cache_manager.store(f"{self.session_id}:markovian_result", result)
+                self.logger.info(
+                    f"Markovian reasoning completed, result length: {len(result)} characters"
+                )
+                return result
         except Exception as e:
             self.logger.error(f"Error in Markovian reasoning: {e}")
             self.logger.error(traceback.format_exc())
-            # Fall back to parallel thinking if Markovian reasoning fails
-            self.logger.info("Falling back to parallel thinking after Markovian reasoning failure")
-            
-            # Get context from the knowledge graph via archivist
-            context = await self.archivist_client.query_memory(user_prompt)
-            
-            # Use prompt manager to prepare the prompt safely
-            prepared_prompt = self.prompt_manager.prepare_prompt(user_prompt, context)
-            
-            # Process the prepared prompt with parallel thinking
-            result = await self.parallel_thinking(prepared_prompt)
-            return result
-
-    async def parallel_thinking(self, prompt: str) -> str:
-        """
-        Perform parallel thinking with multiple specialized thinkers,
-        incorporating coordination principles based on research findings.
-        """
-        # Get thinker roles and descriptions for ToM instructions
-        thinker_info = [
-            {"name": thinker.name, "role_description": getattr(thinker, 'role_description', 'General thinker')}
-            for thinker in self.thinkers
-        ]
-        
-        # Run coordinated thinking with ToM awareness
-        thinker_tasks = [
-            thinker.think(prompt, other_thinkers_info=thinker_info) 
-            for thinker in self.thinkers
-        ]
-        thinker_results = await asyncio.gather(*thinker_tasks, return_exceptions=True)
-
-        # Filter out any errors and prepare insights
-        valid_insights = []
-        for i, result in enumerate(thinker_results):
-            if isinstance(result, Exception):
-                logger.error(f"Error from thinker {i}: {result}")
-                continue
-            # Clean up the result from any POML tags before processing
-            cleaned_result = result.replace("<poml>", "").replace("</poml>", "").replace("<perspective thinker='{}'>".format(self.thinkers[i].name), "").replace("</perspective>", "").replace("<analysis>", "").replace("</analysis>", "")
-            valid_insights.append({
-                "thinker_name": self.thinkers[i].name,
-                "role_description": self.thinkers[i].role_description,
-                "analysis": cleaned_result.strip()
-            })
-
-        # Combine all insights into a structured format for synthesis
-        structured_insights = []
-        for insight in valid_insights:
-            structured_insights.append(
-                f"Thinker: {insight['thinker_name']} ({insight['role_description']})\n"
-                f"Analysis: {insight['analysis']}\n"
+            self.logger.info(
+                "Falling back to direct model response after Markovian reasoning failure"
             )
-        
-        combined_insights = "\n".join(structured_insights)
-        
-        # Analyze coordination metrics
-        try:
-            from ece.agents.common.coordination_analyzer import CoordinationAnalyzer
-            analyzer = CoordinationAnalyzer()
+            # Also check for tools in the fallback path
+            tool_intent = self._analyze_intent_for_tools(user_prompt)
             
-            # Extract just the results for analysis (before cleaning)
-            results_only = [result for result in thinker_results if not isinstance(result, Exception)]
-            if results_only:
-                synergy = analyzer.measure_synergy(results_only)
-                diversity = analyzer.measure_diversity(results_only)
-                complementarity = analyzer.measure_complementarity(results_only, prompt)
+            if tool_intent["needs_tools"]:
+                tool_results = []
                 
-                logger.info(f"Coordination metrics - Synergy: {synergy:.2f}, Diversity: {diversity:.2f}, Complementarity: {complementarity:.2f}")
-        except Exception as e:
-            logger.warning(f"Could not calculate coordination metrics: {e}")
+                if tool_intent["filesystem"]:
+                    try:
+                        fs_result = await self.handle_filesystem_request()
+                        tool_results.append({"type": "filesystem", "result": fs_result})
+                    except Exception as e:
+                        tool_results.append({"type": "filesystem", "error": str(e)})
+                
+                if tool_intent["web_search"]:
+                    try:
+                        web_result = await self.handle_web_search_request(user_prompt)
+                        tool_results.append({"type": "web_search", "result": web_result})
+                    except Exception as e:
+                        tool_results.append({"type": "web_search", "error": str(e)})
+                
+                # Load complete context with tools for fallback
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=tool_results,
+                    session_id=self.session_id
+                )
+            else:
+                # Load complete context without tools for fallback
+                complete_context = self.context_manager.load_complete_context(
+                    prompt=user_prompt,
+                    tool_outputs=None,
+                    session_id=self.session_id
+                )
+            
+            result = await self.direct_model_response(complete_context)
+            # Format the response in the same structure as before for compatibility
+            final_output = {
+                "intermediate_steps": tool_intent["needs_tools"] and tool_results or [],
+                "synthesis_prompt": complete_context,
+                "final_response": result,
+            }
+            return json.dumps(final_output, indent=2)
 
-        # Use synthesis thinker to create coherent response
-        synthesis_prompt = f"""
-        The following insights have been gathered from specialized thinkers with distinct roles. 
-        Please synthesize these into a coherent, comprehensive response that addresses the original query.
-        
-        Original query: {prompt}
-        
-        Insights from different thinkers:
-        {combined_insights}
-        
-        Please integrate the various perspectives into a unified response that:
-        1. Addresses the core question/query
-        2. Incorporates relevant insights from different thinker perspectives
-        3. Maintains a natural, conversational flow
-        4. Does not explicitly mention the names of the thinkers in the final response
-        
-        Synthesized response:
-        """
-        
-        try:
-            synthesis_result = await self.synthesis_thinker.think(synthesis_prompt, other_thinkers_info=[])
-            
-            # Quality control: Check if synthesis is occurring properly
-            # If the result looks like concatenated responses (has multiple greetings), 
-            # it may indicate that synthesis is not working correctly
-            response_quality = self._evaluate_synthesis_quality(synthesis_result, valid_insights)
-            
-            if not response_quality['is_properly_synthesized']:
-                logger.warning("Synthesis quality check failed - responses may not be properly integrated")
-                logger.info(f"Quality metrics: {response_quality}")
-            
-            return synthesis_result
-        except Exception as e:
-            logger.error(f"Synthesis thinker failed: {e}")
-            logger.error("Falling back to basic response generation")
-            
-            # Fallback response when synthesis fails
-            fallback_response = "I analyzed this from multiple perspectives, but I'm unable to provide a detailed synthesis right now. How can I assist you further with your query?"
-            return fallback_response
+
 
     async def handle_filesystem_request(self, path: str = ".") -> str:
-        """
-        Handle filesystem requests by discovering and calling appropriate UTCP tools.
-        """
         try:
-            # Initialize UTCP client if not already done
-            if self.utcp_client is None:
-                self.utcp_client = await UtcpClient.create(config=self.utcp_config)
+            # Ensure UTCP client is initialized
+            await self._ensure_utcp_client()
             
-            # Discover available filesystem tools via UTCP
-            all_tools = await self.utcp_client.search_tools('', limit=100)  # Get all tools
+            # Search for all available tools
+            all_tools = await self.utcp_client.search_tools("", limit=100)
+            self.logger.info(f"Found {len(all_tools)} total tools via UTCP")
+            
             # Filter for filesystem tools
-            fs_tools = [tool for tool in all_tools if 'filesystem' in tool.name.lower() or 'filesystem' in tool.tags]
-            
-            # Log available tools
-            self.logger.info(f"Available filesystem tools: {[tool.name for tool in fs_tools]}")
+            fs_tools = [
+                tool
+                for tool in all_tools
+                if "filesystem" in tool.name.lower() or "filesystem" in getattr(tool, 'tags', [])
+            ]
+            self.logger.info(
+                f"Available filesystem tools: {[tool.name for tool in fs_tools]}"
+            )
             
             if not fs_tools:
                 return "No filesystem tools available via UTCP"
             
-            # Find and call appropriate tool
+            # Look for specific filesystem operations
             for tool in fs_tools:
-                if 'list' in tool.name.lower() or 'dir' in tool.name.lower():
+                tool_name_lower = tool.name.lower()
+                
+                # Look for list_directory tool specifically
+                if any(name in tool_name_lower for name in ["list", "dir", "directory", "browse", "scan"]):
                     result = await self.utcp_client.call_tool(tool.name, {"path": path})
-                    return result
-                elif 'read' in tool.name.lower():
-                    # This would handle file reading
-                    pass
+                    return f"Directory listing for '{path}': {result}"
+                    
+                # Look for read_file tool specifically
+                elif any(name in tool_name_lower for name in ["read", "file", "content"]):
+                    # We need a specific file path for reading, so let's list first to show available files
+                    list_tool = next((t for t in fs_tools if any(n in t.name.lower() for n in ["list", "dir", "directory"])), None)
+                    if list_tool:
+                        list_result = await self.utcp_client.call_tool(list_tool.name, {"path": path})
+                        return f"Files in '{path}': {list_result}. For specific file content, please request to read a specific file."
             
-            # If no specific tool found, use the first available
+            # If no specific tool found, use the first available filesystem tool
             if fs_tools:
-                result = await self.utcp_client.call_tool(fs_tools[0].name, {"path": path})
-                return result
-            
+                result = await self.utcp_client.call_tool(
+                    fs_tools[0].name, {"path": path}
+                )
+                return f"Filesystem operation result: {result}"
+                
             return "No suitable filesystem tool found"
-            
         except Exception as e:
             self.logger.error(f"Error in handle_filesystem_request: {e}")
             self.logger.error(traceback.format_exc())
             return f"Error handling filesystem request: {str(e)}"
 
     async def handle_web_search_request(self, query: str) -> str:
-        """
-        Handle web search requests by discovering and calling appropriate UTCP tools.
-        """
         try:
-            # Initialize UTCP client if not already done
-            if self.utcp_client is None:
-                self.utcp_client = await UtcpClient.create(config=self.utcp_config)
+            # Ensure UTCP client is initialized
+            await self._ensure_utcp_client()
             
-            # Discover available web search tools via UTCP
-            all_tools = await self.utcp_client.search_tools('', limit=100)  # Get all tools
+            # Search for all available tools
+            all_tools = await self.utcp_client.search_tools("", limit=100)
+            self.logger.info(f"Found {len(all_tools)} total tools via UTCP")
+            
             # Filter for web search tools
-            web_tools = [tool for tool in all_tools if 'web' in tool.name.lower() or 'web' in tool.tags or 'search' in tool.name.lower()]
-            
-            # Log available tools
-            self.logger.info(f"Available web search tools: {[tool.name for tool in web_tools]}")
+            web_tools = [
+                tool
+                for tool in all_tools
+                if "web" in tool.name.lower()
+                or "web" in getattr(tool, 'tags', [])
+                or "search" in tool.name.lower()
+                or "tavily" in tool.name.lower()  # Common web search provider
+            ]
+            self.logger.info(
+                f"Available web search tools: {[tool.name for tool in web_tools]}"
+            )
             
             if not web_tools:
                 return "No web search tools available via UTCP"
             
-            # Find and call appropriate tool
+            # Look for search-specific tools
             for tool in web_tools:
-                if 'search' in tool.name.lower():
-                    result = await self.utcp_client.call_tool(tool.name, {"query": query})
-                    return result
+                tool_name_lower = tool.name.lower()
+                
+                if "search" in tool_name_lower or "tavily" in tool_name_lower:
+                    result = await self.utcp_client.call_tool(
+                        tool.name, {"query": query}
+                    )
+                    self.logger.info(f"Web search result received from {tool.name}")
+                    return f"Web search results for '{query}': {result}"
             
-            # If no search tool found, use the first available
+            # If no specific search tool found, use the first available web tool
             if web_tools:
-                result = await self.utcp_client.call_tool(web_tools[0].name, {"query": query})
-                return result
-            
+                result = await self.utcp_client.call_tool(
+                    web_tools[0].name, {"query": query}
+                )
+                self.logger.info(f"Web tool result received from {web_tools[0].name}")
+                return f"Web search results for '{query}': {result}"
+                
             return "No suitable web search tool found"
-            
         except Exception as e:
             self.logger.error(f"Error in handle_web_search_request: {e}")
             self.logger.error(traceback.format_exc())
             return f"Error handling web search request: {str(e)}"
 
-    def _evaluate_synthesis_quality(self, synthesis_result: str, original_insights: list) -> dict:
+    def _analyze_intent_for_tools(self, user_prompt: str) -> Dict[str, bool]:
         """
-        Evaluate if the synthesis properly integrated multiple perspectives or just concatenated them.
+        Analyze the user prompt to determine if tools are needed.
         
         Args:
-            synthesis_result: The final synthesized response
-            original_insights: List of original insights from different thinkers
+            user_prompt: The original user prompt
             
         Returns:
-            A dictionary with quality metrics and assessment
+            Dictionary indicating which tools might be needed
         """
-        quality_metrics = {
-            'is_properly_synthesized': True,
-            'duplicate_content_detected': False,
-            'greeting_count': 0,
-            'has_integrated_elements': False
+        user_prompt_lower = user_prompt.lower()
+        
+        # Keywords that suggest filesystem operations
+        filesystem_keywords = [
+            "file", "directory", "folder", "read", "write", "list", 
+            "scan", "find", "search in", "look in", "contents of",
+            "show me", "show files", "show directory", "browse"
+        ]
+        
+        # Keywords that suggest web search operations
+        web_search_keywords = [
+            "search", "find on web", "find on internet", "google", 
+            "look up", "research", "latest news", "what is happening",
+            "current", "recent", "today", "weather", "news", "fact check",
+            "find information", "research about", "get info about"
+        ]
+        
+        # Determine which tools might be needed
+        needs_filesystem = any(keyword in user_prompt_lower for keyword in filesystem_keywords)
+        needs_web_search = any(keyword in user_prompt_lower for keyword in web_search_keywords)
+        
+        # Log the analysis for debugging
+        self.logger.info(f"Intent analysis - Filesystem: {needs_filesystem}, Web Search: {needs_web_search}, Prompt: {user_prompt[:100]}...")
+        
+        return {
+            "filesystem": needs_filesystem,
+            "web_search": needs_web_search,
+            "needs_tools": needs_filesystem or needs_web_search
         }
-        
-        # Check if the synthesis contains multiple greetings (indicating poor synthesis)
-        greeting_variations = [
-            "hello", "hi ", "hey ", "greetings", "how can i", 
-            "i'm here to", "let me", "first", "on one hand", "on the other hand",
-            "in my opinion", "from my perspective"
-        ]
-        
-        synthesis_lower = synthesis_result.lower()
-        greeting_count = 0
-        for greeting in greeting_variations:
-            if greeting in synthesis_lower:
-                greeting_count += synthesis_lower.count(greeting)
-        
-        quality_metrics['greeting_count'] = greeting_count
-        
-        # If we have more than 2 greetings, synthesis might be poor
-        if greeting_count > 2:
-            quality_metrics['is_properly_synthesized'] = False
-        
-        # Check for repetitive content or poor integration
-        # If the synthesis is simply the original insights concatenated together
-        insight_texts = [insight['analysis'].strip() for insight in original_insights]
-        combined_original_length = sum(len(text) for text in insight_texts)
-        
-        # If the synthesis length is roughly the sum of all insights, it might be just concatenation
-        if len(synthesis_result) > 0 and combined_original_length > 0:
-            expansion_ratio = len(synthesis_result) / combined_original_length
-            if expansion_ratio > 1.5:  # If it's much longer, it might be concatenation
-                quality_metrics['duplicate_content_detected'] = True
-                quality_metrics['is_properly_synthesized'] = False
-        
-        # Check if the synthesis shows evidence of integrating different perspectives
-        integration_indicators = [
-            "on the one hand", "on the other hand", "while", "however", "but", 
-            "combining", "integrating", "balancing", "considering", "different"
-        ]
-        
-        has_integration = any(indicator in synthesis_lower for indicator in integration_indicators)
-        quality_metrics['has_integrated_elements'] = has_integration
-        
-        # Update the final assessment
-        if has_integration and not quality_metrics['duplicate_content_detected']:
-            quality_metrics['is_properly_synthesized'] = True
-        
-        return quality_metrics
 
-    async def initialize_utcp_client(self):
+    async def direct_model_response(self, prompt: str) -> str:
         """
-        Initialize the UTCP client with proper configuration.
+        Get a direct response from the model without parallel thinking.
+        """
+        logger.info("Entering direct_model_response method.")
+        
+        # Ensure model server is running
+        if not await self.model_manager.ensure_model_running():
+            logger.error("Failed to ensure model server is running.")
+            return "Error: Model server is not available."
+        
+        # Extract persona information from the complete context to use as system message
+        # The complete context follows the sequence: PERSONA FOUNDATION, CONVERSATION HISTORY, CURRENT PROMPT, TOOL OUTPUTS
+        if "PERSONA FOUNDATION:" in prompt:
+            # Extract the persona information to use as system message
+            persona_start = prompt.find("PERSONA FOUNDATION:") + len("PERSONA FOUNDATION:")
+            persona_end = prompt.find("\n\n", persona_start)
+            if persona_end == -1:  # If no next section marker, use to end of the persona part
+                persona_part = prompt[persona_start:].strip()
+            else:
+                persona_part = prompt[persona_start:persona_end].strip()
+        else:
+            # Fallback to default system message if persona not found
+            persona_part = "You are a helpful AI assistant. Provide a concise and accurate response to the user's query."
+        
+        # Prepare the messages for API call
+        messages = [
+            {"role": "system", "content": persona_part},
+            {"role": "user", "content": prompt},
+        ]
+
+        payload = {
+            "model": self.config.get("llm", {}).get("providers", {}).get("llama_cpp", {}).get("model", "default-model"),
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "stream": False,
+        }
+
+        # Use the API base from the model manager which may have been updated when starting a new model
+        api_base = self.model_manager.api_base
+        
+        logger.info(f"Sending request to LLM API: {api_base}/chat/completions")
+        try:
+            async with self.http_client.post(
+                f"{api_base}/chat/completions", json=payload
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    logger.info("Received successful response from LLM API.")
+
+                    # Extract the generated text
+                    if "choices" in data and len(data["choices"]) > 0:
+                        generated_text = data["choices"][0]["message"]["content"]
+                        return generated_text
+                    else:
+                        raise Exception(f"Unexpected response format: {data}")
+                else:
+                    error_text = await response.text()
+                    raise Exception(
+                        f"API call failed with status {response.status}: {error_text}"
+                    )
+        except asyncio.TimeoutError:
+            logger.error("Timeout error during LLM API call.")
+            return "Error: Timeout after client session timeout."
+        except aiohttp.ClientError as e:
+            logger.error(f"Client error during LLM API call: {str(e)}")
+            # Model might have gone down, try to restart
+            await self.model_manager.ensure_model_running()
+            return f"Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Generic error during LLM API call: {str(e)}")
+            # Model might have gone down, try to restart
+            await self.model_manager.ensure_model_running()
+            return f"Error: {str(e)}"
+
+    async def select_model(self, model_name: str) -> bool:
+        """
+        Select and start a specific model for on-demand execution.
+        
+        Args:
+            model_name: Name of the model to select and start
+            
+        Returns:
+            bool: True if model selected and started successfully, False otherwise
         """
         try:
-            # Initialize UTCP client if not already done
+            logger.info(f"Attempting to select model: {model_name}")
+            
+            # Use the model manager to select and start the model
+            success = self.model_manager.select_model(model_name)
+            
+            if success:
+                logger.info(f"Model {model_name} selected and started successfully")
+                return True
+            else:
+                logger.error(f"Failed to select and start model: {model_name}")
+                return False
+        except Exception as e:
+            logger.error(f"Error selecting model {model_name}: {str(e)}")
+            return False
+
+    async def get_available_models(self) -> list:
+        """
+        Get list of available models from the models directory.
+        
+        Returns:
+            list: Available model information with name, size, quantization, etc.
+        """
+        try:
+            logger.info("Retrieving available models")
+            available_models = self.model_manager.get_available_models()
+            logger.info(f"Found {len(available_models)} available models")
+            return available_models
+        except Exception as e:
+            logger.error(f"Error retrieving available models: {str(e)}")
+            return []
+
+    async def get_current_model(self) -> str:
+        """
+        Get the currently active model.
+        
+        Returns:
+            str: Current model name or None if no model is running
+        """
+        try:
+            logger.info("Retrieving current model")
+            current_model = self.model_manager.get_current_model()
+            logger.info(f"Current model: {current_model}")
+            return current_model
+        except Exception as e:
+            logger.error(f"Error retrieving current model: {str(e)}")
+            return "Error retrieving current model"
+
+    async def select_model(self, model_name: str) -> bool:
+        """
+        Select and start a specific model for on-demand execution.
+        
+        Args:
+            model_name: Name of the model to select and start
+            
+        Returns:
+            bool: True if model selected and started successfully, False otherwise
+        """
+        try:
+            logger.info(f"Attempting to select model: {model_name}")
+            
+            # Use the model manager to select and start the model
+            success = self.model_manager.select_model(model_name)
+            
+            if success:
+                logger.info(f"Model {model_name} selected and started successfully")
+                return True
+            else:
+                logger.error(f"Failed to select and start model: {model_name}")
+                return False
+        except Exception as e:
+            logger.error(f"Error selecting model {model_name}: {str(e)}")
+            return False
+    
+    async def get_model_status(self) -> dict:
+        """
+        Get the status of the model management system.
+        
+        Returns:
+            dict: Status information about running models
+        """
+        try:
+            logger.info("Retrieving model status")
+            status = self.model_manager.get_model_status()
+            logger.info(f"Model status: {status}")
+            return status
+        except Exception as e:
+            logger.error(f"Error retrieving model status: {str(e)}")
+            return {"error": f"Error retrieving model status: {str(e)}"}
+
+    async def _ensure_utcp_client(self):
+        """
+        Ensure the UTCP client is initialized and ready to use.
+        """
+        if self.utcp_client is None:
+            try:
+                self.utcp_client = await UtcpClient.create(config=self.utcp_config)
+                self.logger.info("UTCP client initialized successfully")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize UTCP client: {e}")
+                raise
+
+    # Removed _evaluate_synthesis_quality method as it was part of the deprecated parallel thinking approach
+    # The system now uses direct model calls and tool usage instead of synthesis from multiple thinkers
+
+    async def initialize_utcp_client(self):
+        try:
             if self.utcp_client is None:
                 self.utcp_client = await UtcpClient.create(config=self.utcp_config)
             return True
@@ -548,3 +732,22 @@ class EnhancedOrchestratorAgent:
             self.logger.error(f"Error initializing UTCP client: {e}")
             self.logger.error(traceback.format_exc())
             return False
+    
+    async def cleanup(self):
+        """
+        Cleanup resources when the orchestrator agent is done.
+        """
+        # Close the HTTP client
+        if hasattr(self, 'http_client') and self.http_client:
+            await self.http_client.close()
+            
+        # Close the UTCP client if it exists
+        if hasattr(self, 'utcp_client') and self.utcp_client:
+            # UTCP client might have a close method depending on the implementation
+            if hasattr(self.utcp_client, 'close'):
+                await self.utcp_client.close()
+                
+        # Shutdown model if needed
+        if hasattr(self, 'model_manager'):
+            # Optionally shutdown the model if it's still running
+            pass  # Let the model manager handle its own cleanup

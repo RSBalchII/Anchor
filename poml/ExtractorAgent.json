@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "ExtractorAgent",
+    "description": "",
+    "author": "",
+    "tags": [],
+    "type": "Specialist Agent"
+  },
+  "components": [
+    {
+      "type": "task",
+      "attributes": {
+        "priority": "0"
+      },
+      "content": "Extract specific information and generate targeted queries from unstructured data."
+    }
+  ],
+  "stylesheets": []
+}

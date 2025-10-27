@@ -13,9 +13,15 @@ from utcp.data.utcp_manual import UtcpManual
 from utcp.data.tool import Tool
 from utcp_http.http_call_template import HttpCallTemplate
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('distiller')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 # Initialize FastAPI app
 app = FastAPI(

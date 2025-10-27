@@ -23,9 +23,15 @@ from utcp.data.utcp_manual import UtcpManual
 from utcp.data.tool import Tool
 from utcp_http.http_call_template import HttpCallTemplate
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('archivist')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -119,8 +125,8 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
 
-class MemoryQueryRequest(BaseModel):
-    """Model for memory query requests."""
+class MemoryContextRequest(BaseModel):
+    """Model for memory context requests."""
     context_id: str
     max_contexts: int = 5  # Default to 5 contexts to prevent memory bloat
 
@@ -631,7 +637,7 @@ async def _scan_cache_tail():
         scan_start_time = current_time - 3600  # 1 hour ago
         
         # Get all keys with the context_cache prefix
-        all_keys = redis_client.keys("context_cache:*")
+        all_keys = redis_client.keys("context_cache:*") or []
         
         if not all_keys:
             logger.debug("No cache entries found to process")
@@ -645,7 +651,7 @@ async def _scan_cache_tail():
         keys_to_process = []
         for key in all_keys:
             # Get the creation time from the key's metadata
-            entry_data = redis_client.hgetall(key)
+            entry_data = redis_client.hgetall(key) or {}
             if entry_data and "created_at" in entry_data:
                 try:
                     # Parse the creation time (assuming it's in ISO format)
@@ -673,7 +679,7 @@ async def _scan_cache_tail():
                 actual_key = key.replace("context_cache:", "")
                 
                 # Get the value
-                entry_data = redis_client.hgetall(key)
+                entry_data = redis_client.hgetall(key) or {}
                 if not entry_data:
                     continue
                     
@@ -703,7 +709,10 @@ async def _scan_cache_tail():
         if not await _reconnect_redis():
             raise
     except Exception as e:
-        logger.error(f"Error scanning cache tail: {str(e)}", exc_info=True)
+        import traceback
+        error_details = f"An unexpected error occurred: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+        logger.error(error_details)
+        print(error_details)
 
 async def continuous_temporal_scanning():
     """Run the continuous temporal scanning process."""
@@ -768,12 +777,12 @@ async def _reconnect_redis():
                 return False
 
 @app.post("/memory_query")
-async def memory_query(request: MemoryQueryRequest):
+async def memory_query(request: MemoryContextRequest):
     """
     Internal endpoint to handle memory queries from the Orchestrator for the Cohesion Loop.
     
     Args:
-        request: MemoryQueryRequest containing context_id and max_contexts
+        request: MemoryContextRequest containing context_id and max_contexts
         
     Returns:
         List of relevant memory contexts
@@ -834,18 +843,63 @@ async def query_memory(request: MemoryQueryRequest):
         query = request.query
         logger.info(f"Received query_memory request for query: {query[:100]}...")
         
-        # For now, we'll return a placeholder response
-        # In a real implementation, this would query the knowledge graph
-        context = f"Relevant context for query: '{query}'\\n\\n" \
-                  f"This is a placeholder response from the Archivist. In a real implementation, " \
-                  f"this would query the Neo4j knowledge graph for relevant memories and context."
-                  
-        logger.info(f"Returning {len(context)} characters of context")
-        return {"context": context}
+        # Parse the query to identify relevant concepts for QLearning agent
+        # This is a simple keyword extraction approach - in a more advanced implementation,
+        # we'd use NLP to identify entities and concepts
+        import re
+        # Extract key terms from the query
+        key_terms = re.findall(r'\b\w+\b', query.lower())
+        # Use the first and last significant terms as start and end nodes for the path
+        if len(key_terms) >= 2:
+            start_node = key_terms[0]
+            end_node = key_terms[-1]
+        else:
+            # If not enough terms, use the entire query or first term and a general concept
+            start_node = key_terms[0] if key_terms else "unknown"
+            end_node = "general_concept"
+        
+        # Call QLearningAgent to find optimal paths in the knowledge graph
+        logger.info(f"Querying QLearning Agent for path from '{start_node}' to '{end_node}'")
+        paths = await qlearning_client.find_optimal_path(start_node, end_node)
+        
+        # Process the paths to extract relevant context
+        if paths:
+            # Get the highest-scoring path
+            best_path = max(paths, key=lambda p: p.score if p.score is not None else 0)
+            
+            # Build context from the path
+            path_context = f"Relevant context for query: '{query}'\n\n"
+            path_context += f"Found optimal path using QLearning: {start_node} -> {end_node}\n"
+            path_context += f"Path score: {best_path.score}\n"
+            path_context += f"Path length: {best_path.length}\n"
+            path_context += f"Nodes in path: {', '.join(best_path.nodes[:10])}{'...' if len(best_path.nodes) > 10 else ''}\n"
+            
+            # Add relationship details if available
+            if best_path.relationships:
+                path_context += f"Relationships: {len(best_path.relationships)}\n"
+                for i, rel in enumerate(best_path.relationships[:3]):  # Limit to first 3 for brevity
+                    path_context += f"  Relationship {i+1}: {rel}\n"
+                if len(best_path.relationships) > 3:
+                    path_context += f"  ... and {len(best_path.relationships) - 3} more\n"
+                    
+            logger.info(f"Returning {len(path_context)} characters of context from QLearning path")
+            return {"context": path_context}
+        else:
+            # If no paths found, return a more meaningful context
+            context = f"Relevant context for query: '{query}'\n\n"
+            context += "No specific QLearning paths found in knowledge graph. " \
+                      "This may indicate the concept is new or not yet connected in the knowledge graph.\n"
+            
+            logger.info(f"Returning {len(context)} characters of context (no QLearning paths found)")
+            return {"context": context}
         
     except Exception as e:
         logger.error(f"Error processing query_memory request: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        # Return a meaningful error context instead of throwing HTTP exception
+        error_context = f"Relevant context for query: '{query}'\n\n" \
+                       f"Error occurred while retrieving context: {str(e)}\n" \
+                       f"System is attempting to continue with available information."
+        return {"context": error_context}
 
 @app.get("/utcp")
 async def utcp_manual():
@@ -1250,15 +1304,60 @@ async def query_memory(request: QueryMemoryRequest):
         query = request.query
         logger.info(f"Received query_memory request for query: {query[:100]}...")
         
-        # For now, we'll return a placeholder response
-        # In a real implementation, this would query the knowledge graph
-        context = f"Relevant context for query: '{query}'\n\n" \
-                  f"This is a placeholder response from the Archivist. In a real implementation, " \
-                  f"this would query the Neo4j knowledge graph for relevant memories and context."
-                  
-        logger.info(f"Returning {len(context)} characters of context")
-        return {"context": context}
+        # Parse the query to identify relevant concepts for QLearning agent
+        # This is a simple keyword extraction approach - in a more advanced implementation,
+        # we'd use NLP to identify entities and concepts
+        import re
+        # Extract key terms from the query
+        key_terms = re.findall(r'\b\w+\b', query.lower())
+        # Use the first and last significant terms as start and end nodes for the path
+        if len(key_terms) >= 2:
+            start_node = key_terms[0]
+            end_node = key_terms[-1]
+        else:
+            # If not enough terms, use the entire query or first term and a general concept
+            start_node = key_terms[0] if key_terms else "unknown"
+            end_node = "general_concept"
+        
+        # Call QLearningAgent to find optimal paths in the knowledge graph
+        logger.info(f"Querying QLearning Agent for path from '{start_node}' to '{end_node}'")
+        paths = await qlearning_client.find_optimal_path(start_node, end_node)
+        
+        # Process the paths to extract relevant context
+        if paths:
+            # Get the highest-scoring path
+            best_path = max(paths, key=lambda p: p.score if p.score is not None else 0)
+            
+            # Build context from the path
+            path_context = f"Relevant context for query: '{query}'\n\n"
+            path_context += f"Found optimal path using QLearning: {start_node} -> {end_node}\n"
+            path_context += f"Path score: {best_path.score}\n"
+            path_context += f"Path length: {best_path.length}\n"
+            path_context += f"Nodes in path: {', '.join(best_path.nodes[:10])}{'...' if len(best_path.nodes) > 10 else ''}\n"
+            
+            # Add relationship details if available
+            if best_path.relationships:
+                path_context += f"Relationships: {len(best_path.relationships)}\n"
+                for i, rel in enumerate(best_path.relationships[:3]):  # Limit to first 3 for brevity
+                    path_context += f"  Relationship {i+1}: {rel}\n"
+                if len(best_path.relationships) > 3:
+                    path_context += f"  ... and {len(best_path.relationships) - 3} more\n"
+                    
+            logger.info(f"Returning {len(path_context)} characters of context from QLearning path")
+            return {"context": path_context}
+        else:
+            # If no paths found, return a more meaningful context
+            context = f"Relevant context for query: '{query}'\n\n"
+            context += "No specific QLearning paths found in knowledge graph. " \
+                      "This may indicate the concept is new or not yet connected in the knowledge graph.\n"
+            
+            logger.info(f"Returning {len(context)} characters of context (no QLearning paths found)")
+            return {"context": context}
         
     except Exception as e:
         logger.error(f"Error processing query_memory request: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        # Return a meaningful error context instead of throwing HTTP exception
+        error_context = f"Relevant context for query: '{query}'\n\n" \
+                       f"Error occurred while retrieving context: {str(e)}\n" \
+                       f"System is attempting to continue with available information."
+        return {"context": error_context}

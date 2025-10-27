@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""
+Model Detection and Configuration Update Script for External Context Engine (ECE)
+This script detects which model server is currently running and updates the ECE configuration accordingly.
+"""
+
+import requests
+import yaml
+import json
+import os
+import socket
+import sys
+from pathlib import Path
+
+def is_port_open(host, port):
+    """Check if a port is open on the given host"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1)  # 1 second timeout
+            result = sock.connect_ex((host, port))
+            return result == 0
+    except:
+        return False
+
+def get_model_info_from_port(port):
+    """Get model information from a running server on the specified port"""
+    try:
+        # Try to get model info from the server
+        response = requests.get(f"http://localhost:{port}/v1/models", timeout=5)
+        if response.status_code == 200:
+            models_data = response.json()
+            if 'data' in models_data and len(models_data['data']) > 0:
+                model_name = models_data['data'][0].get('id', f'unknown_model_on_port_{port}')
+                return model_name
+    except requests.exceptions.RequestException:
+        pass
+    except json.JSONDecodeError:
+        pass
+    return None
+
+def detect_running_model():
+    """Detect which model server is currently running by checking ports 8080-8094"""
+    print("Detecting running model servers...")
+    
+    # Port to model mapping
+    port_model_mapping = {
+        8080: "jamba-reasoning-3b-Q4_K_M",
+        8081: "deepseek-r1-distill-qwen-14b-q4_k_m",
+        8082: "gemma-3-12b-it-q4_0",
+        8083: "ibm-granite_granite-4.0-h-tiny-Q6_K",
+        8084: "jamba-reasoning-3b-F16",
+        8085: "ibm-granite_granite-4.0-h-tiny-Q8_0",
+        8086: "Qwen3-30B-A3B-Q4_K_M",
+        8087: "Qwen3-14B-Q5_K_M",
+        8088: "DeepSeek-Coder-V2-Lite-Instruct-Q5_K_M",
+        8089: "Qwen2.5-Coder-14B-Instruct-Q5_K_M(1)"
+    }
+    
+    # Check each port for a running model server
+    for port in range(8080, 8095):  # Extended to check up to port 8094
+        if is_port_open("localhost", port):
+            print(f"Found server running on port {port}")
+            model_name = get_model_info_from_port(port)
+            if model_name:
+                print(f"Detected model: {model_name}")
+                return port, model_name
+            elif port in port_model_mapping:
+                print(f"Using default model mapping for port {port}: {port_model_mapping[port]}")
+                return port, port_model_mapping[port]
+    
+    print("No running model server detected")
+    return None, None
+
+def update_config_yaml(port, model_name):
+    """Update the config.yaml file with the detected model information"""
+    # Determine the project root directory
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent.parent
+    config_path = project_root / "config.yaml"
+    
+    if not config_path.exists():
+        print(f"Error: config.yaml not found at {config_path}")
+        return False
+    
+    try:
+        # Read the existing config
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # Update the LLM configuration
+        if 'llm' not in config:
+            config['llm'] = {}
+        
+        config['llm']['active_provider'] = 'llama_cpp'
+        
+        if 'providers' not in config['llm']:
+            config['llm']['providers'] = {}
+        
+        if 'llama_cpp' not in config['llm']['providers']:
+            config['llm']['providers']['llama_cpp'] = {}
+        
+        # Update the llama.cpp provider configuration
+        config['llm']['providers']['llama_cpp'].update({
+            'model_path': f"../../models/{model_name}.gguf",
+            'api_base': f"http://localhost:{port}/v1",
+            'model': f"../../models/{model_name}.gguf"
+        })
+        
+        # Update ThinkerAgent configuration if it exists
+        if 'ThinkerAgent' in config:
+            config['ThinkerAgent'].update({
+                'model': f"../../models/{model_name}.gguf",
+                'synthesis_model': f"../../models/{model_name}.gguf"
+            })
+        
+        # Write the updated config back to file
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        
+        print(f"Updated config.yaml with model {model_name} on port {port}")
+        return True
+        
+    except Exception as e:
+        print(f"Error updating config.yaml: {e}")
+        return False
+
+def main():
+    """Main function to detect running model and update configuration"""
+    print("External Context Engine (ECE) Model Detection and Configuration Update")
+    print("=" * 70)
+    
+    # Detect running model
+    port, model_name = detect_running_model()
+    
+    if port and model_name:
+        # Update configuration
+        if update_config_yaml(port, model_name):
+            print(f"\n✓ Successfully updated ECE configuration for model: {model_name}")
+            print(f"✓ Model server detected on port: {port}")
+            print(f"✓ Configuration updated in config.yaml")
+        else:
+            print(f"\n✗ Failed to update ECE configuration for model: {model_name}")
+            return 1
+    else:
+        print("\n⚠ No running model server detected")
+        print("Models are now handled via on-demand ModelManager which starts models when needed.")
+        print("Use the start_ecosystem scripts to start the ECE system.")
+        return 1
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

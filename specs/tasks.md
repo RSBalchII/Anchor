@@ -1,4 +1,4 @@
-# ECE - Task List v4.1
+# ECE - Task List v4.2
 
 This document outlines the high-priority tasks for the current development cycle of the External Context Engine.
 
@@ -8,10 +8,10 @@ This document outlines the high-priority tasks for the current development cycle
 
 **Objective:** Transition the ECE from a Docker-dependent architecture to a fully local, script-based development environment.
 
--   **T-001.1:** Update all configuration files (`.env`, `config.yaml`) to use `localhost` for all service URLs (Redis, Neo4j, UTCP Registry, etc.). This includes properly configuring LLM providers as detailed in `spec.md`.
--   **T-001.2:** Create individual startup scripts (`.bat` or `.sh`) for each agent and service (`Distiller`, `Injector`, `Archivist`, `QLearning`, `UTCP Registry`, `FileSystemAgent`, `WebSearchAgent`).
--   **T-001.3:** Create a main master script (`start_ece_local.bat`) that launches all necessary services and agents in the correct order.
--   **T-001.4:** Document the new local setup process in `README.md`.
+-   **T-001.1:** [COMPLETED] Update all configuration files (`.env`, `config.yaml`) to use `localhost` for all service URLs (Redis, Neo4j, UTCP Registry, etc.). This includes properly configuring LLM providers as detailed in `spec.md`.
+-   **T-001.2:** [COMPLETED] Create individual startup scripts (`.bat` or `.sh`) for each agent and service (`Distiller`, `Injector`, `Archivist`, `QLearning`, `UTCP Registry`, `FileSystemAgent`, `WebSearchAgent`).
+-   **T-001.3:** [COMPLETED] Create a main master script (`start_ece_local.bat`) that launches all necessary services and agents in the correct order.
+-   **T-001.4:** [COMPLETED] Document the new local setup process in `README.md`.
 
 ---
 
@@ -19,11 +19,13 @@ This document outlines the high-priority tasks for the current development cycle
 
 **Objective:** Ensure proper setup and configuration of all supported LLM providers.
 
--   **T-012.1:** Verify Ollama provider configuration and connectivity.
--   **T-012.2:** Verify Docker Desktop provider configuration and connectivity.
--   **T-012.3:** Implement automated setup script for llama.cpp if not already available on the system.
--   **T-012.4:** Document Windows-specific setup procedures for llama.cpp in the project specifications.
--   **T-012.5:** Create validation tests to ensure each LLM provider works correctly with the ECE.
+-   **T-012.1:** [COMPLETED] Verify Ollama provider configuration and connectivity.
+-   **T-012.2:** [COMPLETED] Verify Docker Desktop provider configuration and connectivity.
+-   **T-012.3:** [COMPLETED] Implement automated setup script for llama.cpp if not already available on the system.
+-   **T-012.4:** [COMPLETED] Document Windows-specific setup procedures for llama.cpp in the project specifications.
+-   **T-012.5:** [COMPLETED] Create validation tests to ensure each LLM provider works correctly with the ECE.
+-   **T-012.6:** [COMPLETED] Switch to Q4_K_M quantized model for improved performance and reduced VRAM usage.
+-   **T-012.7:** [COMPLETED] Optimize llama.cpp server parameters including full GPU offloading, appropriate context size, and extended timeouts.
 
 ---
 
@@ -31,23 +33,23 @@ This document outlines the high-priority tasks for the current development cycle
 
 **Objective:** Identify and optimize performance-critical bottlenecks by integrating C++ code via Cython.
 
--   **T-002.1:** Profile the ECE application using `cProfile` and `snakeviz` to identify hotspots, particularly within the `QLearningAgent` and `DistillerAgent`.
--   **T-002.2:** Rewrite the identified bottleneck functions (e.g., Q-table updates, pathfinding algorithms) in C++.
--   **T-002.3:** Create Cython wrapper files (`.pyx`) to bridge the new C++ code with the existing Python codebase.
--   **T-002.4:** Implement a `setup.py` file to compile the Cython extensions.
--   **T-002.5:** Integrate the compiled, high-performance modules back into the Python agents.
+-   **T-002.1:** [COMPLETED] Profile the ECE application using `cProfile` and `snakeviz` to identify hotspots, particularly within the `QLearningAgent` and `DistillerAgent`.
+-   **T-002.2:** [COMPLETED] Rewrite the identified bottleneck functions (e.g., Q-table updates, pathfinding algorithms) in C++.
+-   **T-002.3:** [COMPLETED] Create Cython wrapper files (`.pyx`) to bridge the new C++ code with the existing Python codebase.
+-   **T-002.4:** [COMPLETED] Implement a `utility_scripts/install/py/setup.py` file to compile the Cython extensions.
+-   **T-002.5:** [COMPLETED] Integrate the compiled, high-performance modules back into the Python agents.
 
 ## T-005: Phase 3 - Performance Profiling and Optimization
 
 **Objective:** Execute the full Phase 3 plan for performance profiling and optimization using C++ and Cython.
 
--   **T-005.1:** Conduct comprehensive profiling of the ECE stack under load using `cProfile` and `snakeviz` to identify bottlenecks across all agents.
--   **T-005.2:** Focus on the `QLearningAgent` for initial optimization, identifying the most computationally expensive functions (e.g., Q-table updates, pathfinding algorithms).
--   **T-005.3:** Design and implement C++ equivalents of the most critical bottleneck functions identified in profiling.
--   **T-005.4:** Create Cython integration layer to bridge C++ implementations with existing Python codebase.
--   **T-005.5:** Update `setup.py` to include all new Cython extensions and C++ compilation steps.
--   **T-005.6:** Integrate optimized modules back into the ECE agents and conduct benchmarking tests.
--   **T-005.7:** Document performance improvements achieved and update development guidelines to include C++/Cython optimization workflow.
+-   **T-005.1:** [COMPLETED] Conduct comprehensive profiling of the ECE stack under load using `cProfile` and `snakeviz` to identify bottlenecks across all agents.
+-   **T-005.2:** [COMPLETED] Focus on the `QLearningAgent` for initial optimization, identifying the most computationally expensive functions (e.g., Q-table updates, pathfinding algorithms).
+-   **T-005.3:** [COMPLETED] Design and implement C++ equivalents of the most critical bottleneck functions identified in profiling.
+-   **T-005.4:** [COMPLETED] Create Cython integration layer to bridge C++ implementations with existing Python codebase.
+-   **T-005.5:** [COMPLETED] Update `utility_scripts/install/py/setup.py` to include all new Cython extensions and C++ compilation steps.
+-   **T-005.6:** [COMPLETED] Integrate optimized modules back into the ECE agents and conduct benchmarking tests.
+-   **T-005.7:** [COMPLETED] Document performance improvements achieved and update development guidelines to include C++/Cython optimization workflow.
 
 ---
 
@@ -55,21 +57,21 @@ This document outlines the high-priority tasks for the current development cycle
 
 **Objective:** Address the known prompt-sizing issue to improve system stability.
 
--   **T-003.1:** Analyze the `OrchestratorAgent` and its interaction with the `llama.cpp` server to identify the root cause of the `context overflow` and `invalid argument` errors.
--   **T-003.2:** Implement logic within the ECE to intelligently truncate or manage prompts, ensuring they do not exceed the `llama.cpp` server's configured context window (currently stabilized at 32k).
--   **T-003.3:** Add unit tests to verify that oversized prompts are handled gracefully.
+-   **T-003.1:** [COMPLETED] Analyze the `OrchestratorAgent` and its interaction with the `llama.cpp` server to identify the root cause of the `context overflow` and `invalid argument` errors.
+-   **T-003.2:** [COMPLETED] Implement logic within the ECE to intelligently truncate or manage prompts, ensuring they do not exceed the `llama.cpp` server's configured context window (currently stabilized at 32k).
+-   **T-003.3:** [COMPLETED] Add unit tests to verify that oversized prompts are handled gracefully.
 
 ## T-006: Phase 4 - Core Logic and Stability Enhancements
 
 **Objective:** Execute the full Phase 4 plan to resolve context overflow issues and improve system stability.
 
--   **T-006.1:** Implement robust prompt truncation and management logic within the `OrchestratorAgent` using token counting and intelligent content preservation techniques.
--   **T-006.2:** Develop a context-aware prompt manager that can dynamically adjust content based on model capabilities and context window limits.
--   **T-006.3:** Enhance error handling and reporting across all agents with detailed logging for debugging context overflow issues.
--   **T-006.4:** Create a comprehensive integration test suite specifically targeting prompt management and context overflow scenarios.
--   **T-006.5:** Implement graceful fallback strategies when context limits are reached, including summarization or chunking approaches.
--   **T-006.6:** Add detailed metrics and monitoring for prompt sizes and context usage across the system.
--   **T-006.7:** Update documentation to include best practices for prompt management and context handling.
+-   **T-006.1:** [COMPLETED] Implement robust prompt truncation and management logic within the `OrchestratorAgent` using token counting and intelligent content preservation techniques.
+-   **T-006.2:** [COMPLETED] Develop a context-aware prompt manager that can dynamically adjust content based on model capabilities and context window limits.
+-   **T-006.3:** [COMPLETED] Enhance error handling and reporting across all agents with detailed logging for debugging context overflow issues.
+-   **T-006.4:** [COMPLETED] Create a comprehensive integration test suite specifically targeting prompt management and context overflow scenarios.
+-   **T-006.5:** [COMPLETED] Implement graceful fallback strategies when context limits are reached, using summarization or chunking approaches.
+-   **T-006.6:** [COMPLETED] Add detailed metrics and monitoring for prompt sizes and context usage across the system.
+-   **T-006.7:** [COMPLETED] Update documentation to include best practices for prompt management and context handling.
 
 ---
 
@@ -77,60 +79,110 @@ This document outlines the high-priority tasks for the current development cycle
 
 **Objective:** Package the entire ECE application into a single, distributable executable.
 
--   **T-004.1:** Install and configure **PyInstaller**.
--   **T-004.2:** Create a main entry point script (`run_all_agents.py`) that initializes and runs all agent FastAPI applications.
--   **T-004.3:** Develop a build script (`build.bat`) that uses PyInstaller to package the application, ensuring all necessary data files (`config.yaml`, `.env`, and the `ece` directory) are included.
--   **T-004.4:** Test the generated executable to ensure all agents start and communicate correctly in the packaged environment.
+-   **T-004.1:** [COMPLETED] Install and configure **PyInstaller**.
+-   **T-004.2:** [COMPLETED] Create a main entry point script (`run_all_agents.py`) that initializes and runs all agent FastAPI applications.
+-   **T-004.3:** [COMPLETED] Develop a build script (`utility_scripts/build_package.bat`) that uses PyInstaller to package the application, ensuring all necessary data files (`config.yaml`, `.env`, and the `ece` directory) are included.
+-   **T-004.4:** [COMPLETED] Test the generated executable to ensure all agents start and communicate correctly in the packaged environment.
+-   **T-004.5:** [COMPLETED] Fix ModuleNotFoundError for internal modules like '3c22db458360489351e4__mypyc' by updating PyInstaller spec file with comprehensive hidden imports configuration
 
 ## T-007: Phase 5 - Packaging and Distribution
 
 **Objective:** Execute the full Phase 5 plan to package the ECE into a distributable executable.
 
--   **T-007.1:** Configure PyInstaller with proper hooks and spec file to handle all ECE dependencies including FastAPI, async components, and C++ extensions.
--   **T-007.2:** Create a comprehensive build script that automates the entire packaging process for different platforms (Windows, Linux, macOS).
--   **T-007.3:** Implement a bootstrapping mechanism in the packaged application to check for required services (Neo4j, Redis) before starting agents.
--   **T-007.4:** Add embedded configuration files to the executable to simplify deployment.
--   **T-007.5:** Create distribution testing procedures to verify the executable works correctly on clean systems without Python dependencies.
--   **T-007.6:** Document the packaging process and deployment requirements for end users.
--   **T-007.7:** Implement versioning and update mechanisms for the packaged application.
+-   **T-007.1:** [COMPLETED] Configure PyInstaller with proper hooks and spec file (`utility_scripts/ece_app.spec`) to handle all ECE dependencies including FastAPI, async components, and C++ extensions.
+-   **T-007.2:** [COMPLETED] Create a comprehensive build script (e.g. `utility_scripts/build_package.bat`) that automates the entire packaging process for Windows, Linux, and macOS.
+-   **T-007.3:** [COMPLETED] Implement a bootstrapping mechanism in the packaged application to check for required services (Redis, Neo4j, LLM service, UTCP Registry) before starting agents.
+-   **T-007.4:** [COMPLETED] Add embedded configuration files to the executable to simplify deployment.
+-   **T-007.5:** [COMPLETED] Create distribution testing procedures to verify the executable works correctly on clean systems without Python dependencies.
+-   **T-007.6:** [COMPLETED] Document the packaging process and deployment requirements for end users.
+-   **T-007.7:** [COMPLETED] Implement versioning and update mechanisms for the packaged application.
+-   **T-007.8:** [COMPLETED] Define and document all external service dependencies required for the packaged application to function properly.
+-   **T-007.9:** [COMPLETED] Include common troubleshooting steps for deployment issues in the packaging documentation.
+
+## T-025: Phase 25 - Single Executable Launcher
+
+**Objective:** Create a complete single-executable launcher solution with Docker orchestration and comprehensive build system.
+
+-   **T-025.1:** [COMPLETED] Implement Docker container management in launcher for Neo4j and Redis services.
+-   **T-025.2:** [COMPLETED] Create ECE agent orchestration in launcher with proper process management.
+-   **T-025.3:** [COMPLETED] Implement comprehensive logging infrastructure with separate log files for each component.
+-   **T-025.4:** [COMPLETED] Add error handling and graceful shutdown mechanisms to the launcher.
+-   **T-025.5:** [COMPLETED] Create cross-platform build scripts (Windows batch and Linux/macOS shell) for PyInstaller.
+-   **T-025.6:** [COMPLETED] Develop complete build documentation with instructions and troubleshooting (moved to specs/spec.md).
+-   **T-025.7:** [COMPLETED] Create test scripts to verify launcher functionality.
+-   **T-025.8:** [COMPLETED] Implement orphaned container cleanup to prevent resource leaks.
+-   **T-025.9:** [COMPLETED] Add signal handling for proper process termination.
+
+## T-026: Phase 26 - Building and Packaging Documentation
+
+**Objective:** Consolidate all building and packaging documentation according to the project's documentation policy.
+
+-   **T-026.1:** [COMPLETED] Remove BUILDING.md file from utility_scripts directory as per documentation policy.
+-   **T-026.2:** [COMPLETED] Integrate all building and packaging instructions into specs/spec.md.
+-   **T-026.3:** [COMPLETED] Update README.md to reference the correct documentation location.
+-   **T-026.4:** [COMPLETED] Ensure all build instructions are accessible from allowed documentation locations.
+-   **T-026.5:** [COMPLETED] Verify compliance with documentation policy that only allows README.md, QWEN.md and specs//** as markdown files.
 
 ---
 
-## Phase 17: Architectural Evolution (Markovian Thinking)
+## T-017: Phase 6 - Minimal Launcher Implementation
 
--   **TASK-17.3: Implement TRM Service Client**
-    -   **Description:** Develop a generic `TRM_Client` class in Python. This class will be responsible for communicating with the specialized TRM Service (the "Markovian Thinker") running on a separate port (e.g., 8081).
--   **TASK-17.4: Implement Markovian Loop in Orchestrator**
-    -   **Description:** Refactor the `OrchestratorAgent` to implement the full Markovian reasoning loop as described in `specs/reasoning_flow.md`. This involves:
-        1.  Calling the Primary LLM for the initial draft.
-        2.  Iteratively calling the `TRM_Client` for refinement.
-        3.  Managing the "carryover" state between chunks.
-        4.  Sending the final, polished thought process to the Primary LLM for the final answer.
+**Objective:** Implement a minimal launcher system that focuses only on what's needed to run the models and ECE services, removing all excess scripts while preserving essential functionality.
 
-## T-008: Phase 17 - Markovian Thinking Implementation
+-   **T-017.1:** [COMPLETED] Design a minimal launcher system that works from any directory and automatically manages all required services.
+-   **T-017.2:** [COMPLETED] Identify and preserve only the essential scripts needed to run models and ECE services.
+-   **T-017.3:** [COMPLETED] Remove all unnecessary scripts while preserving `utility_scripts/read_all.py` and essential launcher functionality.
+-   **T-017.4:** [COMPLETED] Ensure the config update script works properly to automatically update configuration based on running models.
+-   **T-017.5:** [COMPLETED] Ensure the launcher shows all output in the terminal for debugging purposes.
+-   **T-017.6:** [COMPLETED] Test the minimal launcher system thoroughly to ensure it works correctly from any directory.
+-   **T-017.7:** [COMPLETED] Update documentation to reflect the new minimal launcher system.
+-   **T-017.8:** [IN PROGRESS] Create automated test suites for the minimal launcher system.
+-   **T-017.9:** [PENDING] Document best practices for using the minimal launcher system.
 
-**Objective:** Execute the full Phase 17 plan to implement the Markovian Thinking paradigm.
+## T-021: Phase 24 - Debug Launcher Implementation
 
--   **T-008.1:** [COMPLETED] Develop the TRM_Client class for communicating with the specialized TRM Service.
--   **T-008.2:** [COMPLETED] Create a TRM service mock or implementation that can perform iterative refinement.
--   **T-008.3:** [COMPLETED] Refactor OrchestratorAgent to implement the Markovian reasoning loop.
--   **T-008.4:** [COMPLETED] Implement carryover state management between reasoning chunks.
--   **T-008.5:** [COMPLETED] Add configuration options to enable/disable Markovian thinking for specific queries.
--   **T-008.6:** [IN PROGRESS] Create integration tests for the Markovian reasoning workflow.
--   **T-008.7:** [IN PROGRESS] Document the Markovian thinking implementation and usage.
+**Objective:** Implement a debug launcher system that provides enhanced visibility into ECE agents' operations by displaying all output directly in the terminal, which is invaluable for troubleshooting and development.
 
-## T-014: Phase 19 - Enhanced Markovian Integration
+-   **T-021.1:** [COMPLETED] Design a debug launcher system that shows all agent output directly in the terminal.
+-   **T-021.2:** [COMPLETED] Implement PowerShell script with core functionality for service detection and process management.
+-   **T-021.3:** [COMPLETED] Create batch wrapper for convenient Windows entry point.
+-   **T-021.4:** [COMPLETED] Implement service detection for Docker, Neo4j, and Redis containers.
+-   **T-021.5:** [COMPLETED] Implement model server detection on standard ports (8080-8088).
+-   **T-021.6:** [COMPLETED] Implement process management for existing ECE agent processes.
+-   **T-021.7:** [COMPLETED] Ensure terminal output visibility for debugging purposes.
+-   **T-021.8:** [COMPLETED] Test debug launcher system thoroughly to ensure it works correctly.
+-   **T-021.9:** [COMPLETED] Update documentation to reflect the new debug launcher system.
 
-**Objective:** Fully integrate Markovian Thinking with the EnhancedOrchestratorAgent and ensure robust operation.
+---
 
--   **T-014.1:** [COMPLETED] Implement the Markovian reasoning analyzer to determine when to use Markovian thinking vs. parallel thinking.
+## T-013: Phase 17 - Enhanced Orchestrator Implementation
+
+**Objective:** Execute the full Phase 17 plan to implement the EnhancedOrchestratorAgent with improved context management, parallel thinking, and response synthesis.
+
+-   **T-013.1:** [COMPLETED] Implement the `process_prompt_with_context_management` method with proper context overflow prevention.
+-   **T-013.2:** [COMPLETED] Develop parallel thinking architecture with multiple specialized thinkers.
+-   **T-013.3:** [COMPLETED] Create synthesis thinker to combine insights from multiple sources into coherent responses.
+-   **T-013.4:** [COMPLETED] Integrate ArchivistClient for knowledge retrieval and context management.
+-   **T-013.5:** [COMPLETED] Implement robust error handling for individual thinker failures while maintaining system stability.
+-   **T-013.6:** [COMPLETED] Create integration tests for the EnhancedOrchestratorAgent's processing flow.
+-   **T-013.7:** [COMPLETED] Ensure backward compatibility with existing endpoints and update documentation.
+
+---
+
+## T-014: Phase 18 - Markovian Reasoning Integration & Optimization
+
+**Objective:** Fully integrate Markovian Thinking with the EnhancedOrchestratorAgent and optimize its operation.
+
+-   **T-014.1:** [COMPLETED] Integrate the reasoning analyzer to determine when to use Markovian vs. parallel thinking based on prompt characteristics.
 -   **T-014.2:** [COMPLETED] Integrate the MarkovianThinker class with the EnhancedOrchestratorAgent.
 -   **T-014.3:** [COMPLETED] Implement proper error handling and fallback mechanisms from Markovian to parallel thinking.
 -   **T-014.4:** [COMPLETED] Optimize chunk size and state carryover parameters based on performance testing.
 -   **T-014.5:** [IN PROGRESS] Create comprehensive test suite for Markovian reasoning functionality.
 -   **T-014.6:** [IN PROGRESS] Document performance characteristics and ideal use cases for Markovian reasoning.
 
-## T-015: Phase 20 - Multi-Agent Coordination Implementation
+---
+
+## T-015: Phase 19 - Multi-Agent Coordination & Emergence
 
 **Objective:** Implement enhanced coordination between agents based on research findings from "Emergent Coordination in Multi-Agent Language Models".
 
@@ -141,54 +193,158 @@ This document outlines the high-priority tasks for the current development cycle
 -   **T-015.5:** [IN PROGRESS] Validate coordination improvements through performance testing and metrics analysis.
 -   **T-015.6:** [PENDING] Document coordination analysis tools and their interpretation for system optimization.
 
-## T-013: Phase 18 - Enhanced Orchestrator Implementation
+---
 
-**Objective:** Execute the full Phase 18 plan to implement the EnhancedOrchestratorAgent with improved context management, parallel thinking, and response synthesis.
+## T-016: Phase 20 - Performance Profiling and Optimization
 
--   **T-013.1:** Implement the `process_prompt_with_context_management` method with proper context overflow prevention.
--   **T-013.2:** Develop parallel thinking architecture with multiple specialized thinkers.
--   **T-013.3:** Create synthesis thinker to combine insights from multiple sources into coherent responses.
--   **T-013.4:** Integrate ArchivistClient for knowledge retrieval and context management.
--   **T-013.5:** Implement robust error handling for individual thinker failures.
--   **T-013.6:** Create integration tests for the EnhancedOrchestratorAgent's processing flow.
--   **T-013.7:** Ensure backward compatibility with existing endpoints and update documentation.
+**Objective:** Conduct comprehensive performance profiling and optimization of the complete ECE system.
+
+-   **T-016.1:** [COMPLETED] Use `cProfile` and `snakeviz` to conduct thorough performance analysis of the entire ECE stack under load.
+-   **T-016.2:** [COMPLETED] Focus on the `QLearningAgent` and `DistillerAgent` for initial optimization, identifying the most computationally expensive functions.
+-   **T-016.3:** [COMPLETED] Design and implement C++ equivalents of the most critical bottleneck functions identified in profiling.
+-   **T-016.4:** [COMPLETED] Create Cython integration layer to bridge C++ implementations with existing Python codebase.
+-   **T-016.5:** [COMPLETED] Update `utility_scripts/install/py/setup.py` to include all new Cython extensions and C++ compilation steps.
+-   **T-016.6:** [COMPLETED] Integrate optimized modules back into the ECE agents and conduct benchmarking tests.
+-   **T-016.7:** [COMPLETED] Document performance improvements achieved and update development guidelines to include C++/Cython optimization workflow.
 
 ---
 
-## T-009: Phase 6 - System Validation & GUI Testing
+## T-008: Phase 7 - Markovian Thinking Implementation
+
+**Objective:** Execute the full Phase 7 plan to implement the Markovian Thinking paradigm.
+
+-   **T-008.1:** [COMPLETED] Develop the TRM_Client class for communicating with the specialized TRM Service.
+-   **T-008.2:** [COMPLETED] Create a TRM service mock or implementation that can perform iterative refinement.
+-   **T-008.3:** [COMPLETED] Refactor OrchestratorAgent to implement the Markovian reasoning loop.
+-   **T-008.4:** [COMPLETED] Implement carryover state management between reasoning chunks.
+-   **T-008.5:** [COMPLETED] Add configuration options to enable/disable Markovian thinking for specific queries.
+-   **T-008.6:** [IN PROGRESS] Create integration tests for the Markovian reasoning workflow.
+-   **T-008.7:** [IN PROGRESS] Document the Markovian thinking implementation and usage.
+
+---
+
+## T-009: Phase 16 - System Validation & GUI Testing
 
 **Objective:** Execute comprehensive end-to-end validation of the ECE system.
 
--   **T-009.1:** Design comprehensive test scenarios covering all ECE functionality.
--   **T-009.2:** Perform end-to-end testing of the complete workflow from user input to final output.
--   **T-009.3:** Validate GUI integration with all ECE components.
--   **T-009.4:** Test Markovian reasoning loop with complex real-world queries.
--   **T-009.5:** Conduct performance testing under load with multiple concurrent requests.
--   **T-009.6:** Identify and document any bugs or integration issues.
--   **T-009.7:** Create automated test suites for ongoing validation.
+-   **T-009.1:** [COMPLETED] Design comprehensive test scenarios covering all ECE functionality.
+-   **T-009.2:** [COMPLETED] Perform end-to-end testing of the complete workflow from user input to final output.
+-   **T-009.3:** [COMPLETED] Validate GUI integration with all ECE components.
+-   **T-009.4:** [COMPLETED] Test Markovian reasoning loop with complex real-world queries.
+-   **T-009.5:** [COMPLETED] Conduct performance testing under load with multiple concurrent requests.
+-   **T-009.6:** [COMPLETED] Identify and document any bugs or integration issues.
+-   **T-009.7:** [COMPLETED] Create automated test suites for ongoing validation.
 
 ---
 
-## T-010: Phase 7 - TRM Fine-Tuning & Specialization
+## T-010: Phase 8 - TRM Fine-Tuning & Specialization
 
 **Objective:** Replace the mock TRM service with a fine-tuned specialized model.
 
--   **T-010.1:** Create a dataset of critique and refined_plan examples for fine-tuning.
--   **T-010.2:** Fine-tune the AI21-Jamba-Reasoning-3B model on the custom dataset.
--   **T-010.3:** Deploy the fine-tuned model locally on port 8081.
--   **T-010.4:** Validate the fine-tuned TRM service performance against the mock.
--   **T-010.5:** Optimize the fine-tuned model for latency and accuracy.
--   **T-010.6:** Document the fine-tuning process and results.
+-   **T-010.1:** [PLANNED] Create a dataset of critique and refined_plan examples for fine-tuning.
+-   **T-010.2:** [PLANNED] Fine-tune the AI21-Jamba-Reasoning-3B model on the custom dataset.
+-   **T-010.3:** [PLANNED] Deploy the fine-tuned model locally on port 8081.
+-   **T-010.4:** [PLANNED] Validate the fine-tuned TRM service performance against the mock.
+-   **T-010.5:** [PLANNED] Optimize the fine-tuned model for latency and accuracy.
+-   **T-010.6:** [PLANNED] Document the fine-tuning process and results.
 
 ---
 
-## T-011: Phase 8 - Continuous Improvement & Co-Evolution
+## T-011: Phase 9 - Continuous Improvement & Co-Evolution
 
 **Objective:** Implement continuous improvement processes for ongoing system evolution.
 
--   **T-011.1:** Implement performance monitoring and profiling tools for ongoing optimization.
--   **T-011.2:** Identify additional tasks suitable for specialized TRM models.
--   **T-011.3:** Develop processes for continuous knowledge graph curation and expansion.
--   **T-011.4:** Enhance self-modification capabilities for codebase understanding.
--   **T-011.5:** Create quality assurance procedures for ongoing validation.
--   **T-011.6:** Document the continuous improvement processes and protocols.
+-   **T-011.1:** [PLANNED] Implement performance monitoring and profiling tools for ongoing optimization.
+-   **T-011.2:** [PLANNED] Identify additional tasks suitable for specialized TRM models.
+-   **T-011.3:** [PLANNED] Develop processes for continuous knowledge graph curation and expansion.
+-   **T-011.4:** [PLANNED] Enhance self-modification capabilities for codebase understanding.
+-   **T-011.5:** [PLANNED] Create quality assurance procedures for ongoing validation.
+-   **T-011.6:** [PLANNED] Document the continuous improvement processes and protocols.
+
+---
+
+## T-018: Phase 21 - UTCP Decentralized Architecture and Neo4j Authentication Fixes
+
+**Objective:** Implement fixes for critical UTCP and Neo4j authentication issues to improve system reliability.
+
+-   **T-018.1:** [COMPLETED] Update orchestrator to use decentralized UTCP approach connecting directly to individual service endpoints
+-   **T-018.2:** [COMPLETED] Configure orchestrator to connect to specific agent UTCP endpoints (Distiller: 8001, QLearning: 8002, Archivist: 8003, Injector: 8004, FileSystem: 8006, WebSearch: 8007)
+-   **T-018.3:** [COMPLETED] Remove dependency on centralized UTCP Registry service
+-   **T-018.4:** [COMPLETED] Fix Neo4j authentication by ensuring all agents use consistent credentials ("ECE_secure_password_2025")
+-   **T-018.5:** [COMPLETED] Update default passwords in agent configuration files to match .env file values
+-   **T-018.6:** [COMPLETED] Verify all agents properly retrieve Neo4j credentials from environment variables
+
+## T-019: Phase 22 - Externalized Memory & Context Loading Pattern Implementation
+
+**Objective:** Implement the correct context loading pattern where POML/JSON persona is loaded first, followed by Redis context, then prompt, and finally tool outputs.
+
+-   **T-019.1:** [IN PROGRESS] Modify orchestrator to load POML/JSON persona files before any processing begins
+-   **T-019.2:** [PENDING] Update EnhancedOrchestratorAgent to maintain persona throughout processing flow
+-   **T-019.3:** [PENDING] Modify conversationalist module to load persona first before processing
+-   **T-019.4:** [PENDING] Modify Markovian thinker module to maintain persona across chunked iterations
+-   **T-019.5:** [PENDING] Enhance context summarization to include persona information
+-   **T-019.6:** [PENDING] Ensure Redis context loads after persona but before prompt processing
+-   **T-019.7:** [PENDING] Integrate tool outputs after persona and context loading
+-   **T-019.8:** [PENDING] Create tests to verify correct context loading order
+-   **T-019.9:** [PENDING] Document the new context loading pattern
+
+## T-020: Phase 23 - On-Demand Model Execution Implementation
+
+**Objective:** Implement on-demand model execution where models start when needed for processing and stop to save resources, while preserving persona and conversation memory.
+
+-   **T-020.1:** [COMPLETED] Add ModelManager class to handle starting and stopping model servers on-demand
+-   **T-020.2:** [COMPLETED] Implement model lifecycle management with health checking
+-   **T-020.3:** [COMPLETED] Implement model discovery functionality to scan available models
+-   **T-020.4:** [COMPLETED] Modify orchestrator processing flow to use ModelManager before processing
+-   **T-020.5:** [COMPLETED] Implement resource optimization through automatic model start/stop
+-   **T-020.6:** [COMPLETED] Test performance and resource usage with on-demand execution
+-   **T-020.7:** [COMPLETED] Document on-demand model execution approach
+-   **T-020.8:** [COMPLETED] Add API endpoints for model selection and management
+-   **T-020.9:** [COMPLETED] Implement port management for multiple model servers
+
+## T-021: Phase 24 - Model Manager State Synchronization Fix
+
+**Objective:** Resolve the synchronization issue between global and orchestrator ModelManager instances to ensure forge-cli model selection is visible across all components.
+
+-   **T-021.1:** [COMPLETED] Analyze the problem of separate ModelManager instances not sharing state
+-   **T-021.2:** [COMPLETED] Implement shared class-level state variables in ModelManager
+-   **T-021.3:** [COMPLETED] Create property-based access to shared state variables
+-   **T-021.4:** [COMPLETED] Test synchronization between forge-cli and orchestrator instances
+-   **T-021.5:** [COMPLETED] Validate that model selection via forge-cli is properly visible to orchestrator agents
+-   **T-021.6:** [COMPLETED] Document the shared state mechanism in the ModelManager class
+
+## T-022: Phase 25 - Global Model Manager Singleton Implementation
+
+**Objective:** Implement a true singleton pattern for ModelManager to ensure only one global instance exists across the entire ECE system.
+
+-   **T-022.1:** [COMPLETED] Modify ModelManager class to use __new__ method and global variable for singleton implementation
+-   **T-022.2:** [COMPLETED] Add initialization guard to prevent re-initialization of singleton instance
+-   **T-022.3:** [COMPLETED] Remove duplicate methods from ModelManager class
+-   **T-022.4:** [COMPLETED] Verify that all references to ModelManager now point to the same global instance
+-   **T-022.5:** [COMPLETED] Test and validate singleton implementation works correctly with proper state maintenance
+-   **T-022.6:** [COMPLETED] Update documentation to reflect the singleton pattern implementation
+
+## T-023: Phase 26 - Debug Launcher Implementation
+
+**Objective:** Implement a debug launcher system that provides enhanced visibility into ECE agents' operations by displaying all output directly in the terminal, which is invaluable for troubleshooting and development.
+
+-   **T-023.1:** [COMPLETED] Design a debug launcher system that shows all agent output directly in the terminal
+-   **T-023.2:** [COMPLETED] Implement PowerShell script with core functionality for service detection and process management
+-   **T-023.3:** [COMPLETED] Create batch wrapper for convenient Windows entry point
+-   **T-023.4:** [COMPLETED] Implement service detection for Docker, Neo4j, and Redis containers
+-   **T-023.5:** [COMPLETED] Implement model server detection on standard ports (8080-8094)
+-   **T-023.6:** [COMPLETED] Implement process management for existing ECE agent processes
+-   **T-023.7:** [COMPLETED] Ensure terminal output visibility for debugging purposes
+-   **T-023.8:** [COMPLETED] Test debug launcher system thoroughly to ensure it works correctly
+-   **T-023.9:** [COMPLETED] Update documentation to reflect the new debug launcher system
+
+## T-024: Phase 27 - Configuration Path and API Base Corrections
+
+**Objective:** Fix critical configuration issues in config.yaml including double .gguf extension and incorrect API base port assignments.
+
+-   **T-024.1:** [COMPLETED] Identify incorrect model path with double `.gguf` extension: `gemma-3-4b-it-qat-abliterated.q8_0.gguf.gguf`
+-   **T-024.2:** [COMPLETED] Fix redundant path structure in model configuration: `../../models/..\\..\\models\\`
+-   **T-024.3:** [COMPLETED] Correct model path to standard format: `./models/gemma-3-4b-it-qat-abliterated.q8_0.gguf`
+-   **T-024.4:** [COMPLETED] Verify API base ports are correctly assigned for different models
+-   **T-024.5:** [COMPLETED] Update documentation to reflect proper model path conventions
+-   **T-024.6:** [COMPLETED] Test configuration changes to ensure model loading works correctly

@@ -1,10 +1,14 @@
-# External Context Engine (ECE) - Project Overview
+# External Context Engine (ECE) Project
 
-## Project Description
+## Project Overview
+
 The External Context Engine (ECE) is a sophisticated cognitive architecture designed to provide persistent memory and context management for AI systems. It's an advanced agentic system that enables AI applications to maintain long-term relationships, recall past conversations, and build coherent narratives from fragmented knowledge. The system is designed to operate entirely on local hardware without cloud dependencies.
 
+The ECE implements a multi-tier agent architecture with a focus on local-first execution, performance optimization using C++/Cython, and sophisticated reasoning capabilities through Markovian Thinking.
+
 ## Architecture Overview
-The ECE implements a multi-tier agent architecture:
+
+The ECE uses a three-tier agent architecture:
 
 - **Tier 1**: Orchestrator Agent - Central coordinator that routes prompts to appropriate agents
 - **Tier 2**: Tool Agents - Specialized agents like WebSearchAgent and FileSystemAgent
@@ -15,39 +19,48 @@ The ECE implements a multi-tier agent architecture:
   - InjectorAgent: Optimizes the knowledge graph through reinforcement learning
 
 ### Core Technologies
+
 - **LLM Integration**: Supports multiple providers (Ollama, llama.cpp, Docker Desktop)
 - **Knowledge Graph**: Neo4j for persistent memory storage
 - **Caching**: Redis-based context cache with 32GB allocation
 - **Framework**: FastAPI for web services
 - **Communication**: UTCP (Universal Tool Calling Protocol) for tool discovery and execution
 
-## Key Features
+### Key Features
 
-### Markovian Thinking Architecture
+#### Markovian Thinking Architecture
 The ECE implements a sophisticated reasoning system called "Markovian Thinking":
 - **Chunked Reasoning**: Processes information in fixed-size context windows
 - **Dual-LLM PEVG Model**: Uses a Primary LLM (Generator) and TRM Service (Executor/Verifier)
 - **Iterative Refinement**: Implements "propose -> critique -> refine" loops via specialized TRM service
 - **Textual Carryover**: Maintains context between chunks with concise summaries
 
-### Multi-Agent Coordination & Emergence
-Based on research findings from "Emergent Coordination in Multi-Agent Language Models", the ECE implements enhanced coordination between agents:
-- **Thinker Personas**: Each thinker agent is assigned a detailed persona with background, expertise, and personality traits to create stable identity-linked differentiation.
-- **Theory of Mind (ToM) Integration**: Thinker agents are instructed to consider what other agents might do and how their actions might affect the group outcome, enabling more effective collaboration.
-- **Role Complementarity**: Different thinkers are assigned complementary roles (Optimist, Pessimist, Analytical, Creative, Pragmatic, Strategic, Ethical) to ensure diverse perspectives contribute to the solution.
-- **Coordination Analysis**: The system includes metrics to measure synergy, diversity, and complementarity among thinker agents to ensure productive collective intelligence.
-- **Emergent Behavior Steering**: Prompt design and role assignments are used to steer the system from mere aggregates to higher-order collectives with coordinated behavior.
+#### Intelligent Memory Management
+- **Archivist Agent**: Central coordinator for knowledge graph operations
+- **QLearning Agent**: Reinforcement learning for optimal path finding
+- **Context Cache**: Redis-based caching
+- **Token-Aware Summarization**: Processes large amounts of context
 
-### Performance Optimization
-- **C++/Cython Integration**: Performance-critical components rewritten in C++
-- **Profiling-Driven Development**: Regular performance profiling with cProfile and snakeviz
-- **GPU Acceleration**: CUDA support for accelerated embedding generation
+#### Enhanced Context Retrieval
+- **Keyword-Based Querying**: Extracts keywords for targeted memory retrieval
+- **Semantic Search**: Vector similarity search using Sentence Transformers
+- **Path Finding**: Q-Learning optimized traversal of knowledge graph
+- **Context Summarization**: Token-aware summarization within LLM limits
 
-### Core Capabilities
-- **Intelligent Memory Management**: Q-Learning powered context retrieval
-- **Context-Aware Prompt Management**: Dynamic adjustment of content based on model capabilities
-- **Token-Aware Summarization**: Processes large contexts up to 1M tokens
-- **Local-First Architecture**: Runs entirely on local hardware without cloud dependencies
+#### On-Demand Model Management
+- **ModelManager**: Handles starting and stopping models on demand
+- **Automatic Port Assignment**: Assigns available ports dynamically
+- **Model Discovery**: Scans models directory to identify available GGUF models
+- **Resource Optimization**: Starts models only when needed and stops them to save resources
+- **Configuration Fixes**: Correctly handles model paths in config.yaml, fixing double `.gguf` extension issue and redundant path structure
+- **API Base Management**: Properly manages API base URLs with appropriate port assignments for different models
+
+#### Externalized Memory & Context Management
+The ECE implements a multi-tiered context management system that preserves identity and memory external to any model:
+1. **POML/JSON Persona**: Loaded first to establish identity and protocols
+2. **Redis Context**: Conversation history and contextual information
+3. **Current Prompt**: The immediate task or query
+4. **Tool Outputs**: Additional information from web search, file operations, etc.
 
 ## Building and Running
 
@@ -60,98 +73,127 @@ Based on research findings from "Emergent Coordination in Multi-Agent Language M
 ### Setup
 1. Install dependencies: `pip install -r requirements.txt`
 2. Configure environment: Create `.env` file with Neo4j and Redis connection details
-3. Configure LLM provider in `config.yaml`:
-   ```yaml
-   llm:
-     active_provider: llama_cpp  # or ollama
-     providers:
-       llama_cpp:
-         model_path: "./models/your-model.gguf"
-         api_base: "http://localhost:8080/v1"
-     ```
+3. Configure LLM provider in `config.yaml`
 
 ### Running the System
-1. Start required services (Neo4j, Redis)
-2. If using llama.cpp, run it first:
-   - Use `run_llama_server.bat` (Windows) or appropriate script
-3. Start all ECE agents:
-   ```
-   python run_all_agents.py
-   ```
-   This starts all agents on different ports (8000-8007)
 
-### Packaging
-To create a distributable executable:
-1. Install PyInstaller: `pip install pyinstaller`
-2. Run appropriate build script:
-   - Windows: `build_package.bat`
-   - Linux/macOS: `./build_package.sh`
+#### Recommended: Using the Launcher Script
+The ECE includes a launcher system to start all components:
 
-## Development Conventions
+```bash
+# Navigate to the start directory
+cd utility_scripts/start
 
-### Architecture Philosophy
-- **Modular Components**: Smaller, specialized, independently deployable components
-- **Local-First**: All processing occurs on local hardware
-- **Multi-Agent System**: Specialized agents handle different tasks
-- **Script-Based Deployment**: Simple scripts for launching and managing agents
+# Start the entire ecosystem
+python start_ecosystem.py
+```
 
-### Testing Approach
-- Unit tests for individual components (in Tests/ directory)
-- Integration tests for agent communication
-- Performance testing for optimized components
-- Markovian thinking validation tests
+The launcher will:
+- Start required Docker services (Neo4j, Redis) if not already running
+- Configure the system for on-demand model management
+- Start all ECE agents on their respective ports
 
-### Code Structure
-- `ece/`: Main source code organized by agent tiers
-- `specs/`: Specification documents for architecture and development plans
-- `Tests/`: Test suites for different components
-- `models/`: Location for LLM model files
-- `poml/`: POML specification files
+#### Manual Starting
+Alternatively, start agents individually:
+```bash
+# Start the main orchestrator and all agents
+python run_all_agents.py
+```
 
-## Current Development Phases
-The project has completed major architectural implementation phases and is now focused on:
+### Core Components
 
-1. **Phase 6**: System Validation & GUI Testing - End-to-end testing of workflows
-2. **Phase 7**: TRM Fine-Tuning & Specialization - Replacing mock TRM with fine-tuned models
-3. **Phase 8**: Continuous Improvement & Co-Evolution - Ongoing system enhancement
+- **Orchestrator**: The central nervous system. Classifies intent and delegates tasks to other agents.
+- **DistillerAgent**: Analyzes raw text to extract entities and relationships.
+- **ArchivistAgent**: Persists structured data to the Neo4j knowledge graph.
+- **QLearningAgent**: Intelligently traverses the knowledge graph to find optimal context paths.
+- **InjectorAgent**: Optimizes the knowledge graph through reinforcement learning.
+- **FileSystemAgent**: Provides tools for reading, writing, and listing files.
+- **WebSearchAgent**: Provides tools for internet-based searches.
 
 ## Configuration
-The system uses multiple configuration files:
-- `config.yaml`: Main system configuration including LLM providers and memory limits
-- `.env`: Environment-specific settings like API keys and service URLs
-- Individual agent configuration files for specific behaviors
 
-## Key Files
-- `run_all_agents.py`: Main entry point to start all ECE agents
-- `config.yaml`: Main configuration file for the system
-- `requirements.txt`: Python dependencies
-- `specs/`: Directory containing architectural specifications and plans
-- Various agent files in `ece/agents/` directories
+The ECE is configured through `config.yaml`:
 
-## Recent Enhancements
+```yaml
+llm:
+  active_provider: llama_cpp  # Can be ollama, docker_desktop, or llama_cpp
+  providers:
+    llama_cpp:
+      model_path: "./models/your-model.gguf"
+      api_base: "http://localhost:8080/v1"
+```
 
-### Coordination Analyzer Module
-- Created `coordination_analyzer.py` with classes to measure synergy, diversity, and complementarity among thinker agents
-- Implemented `CoordinationAnalyzer` with metrics based on information theory concepts from the research
-- Created `ThinkerCoordinator` to manage persona assignments and Theory of Mind (ToM) instructions
+## Development
 
-### Enhanced Thinker Architecture
-- Updated `BaseThinker` class to include persona assignments and ToM capabilities
-- Modified the `think` method to accept information about other thinkers and incorporate ToM considerations
-- Updated `SynthesisThinker` to be compatible with the new architecture
+### Environment Setup
+```bash
+# Create virtual environment
+python -m venv .venv
+# Activate the virtual environment
+# On Windows: .venv\Scripts\activate
+# On macOS/Linux: source .venv/bin/activate
 
-### Coordinated Parallel Thinking
-- Enhanced the `parallel_thinking` method to use coordination-aware thinking
-- Added collection of thinker roles and descriptions for ToM instructions
-- Implemented coordination metrics analysis during the parallel thinking process
+# Install dependencies
+pip install -r requirements.txt
+```
 
-### Configuration Updates
-- Updated `config.yaml` with detailed persona definitions for each thinker type
-- Added role descriptions and system prompts that align with the research findings
+### Running Tests
+```bash
+pytest tests/
+```
 
-### Spec Documentation Updates
-- **spec.md**: Added section 3.6 on "Coordination in Multi-Agent Systems" detailing the implementation
-- **reasoning_flow.md**: Added section on "Multi-Agent Coordination & Emergence" explaining the coordination approach
-- **tasks.md**: Added T-015 for "Multi-Agent Coordination Implementation" with detailed tasks
-- **plan.md**: Added Phase 20 for "Multi-Agent Coordination & Emergence" with implementation goals
-- **specs/README.md**: Updated to reflect the new multi-agent coordination implementation
+### Key Components
+
+#### Model Management
+The ModelManager class handles on-demand model execution, including:
+- Starting, stopping, and health checking of model servers
+- Dynamic switching between different models
+- Automatic port assignment for multiple model servers
+- Model discovery to scan available models in the models/ directory
+
+#### UTCP Implementation
+The ECE fully implements the Universal Tool Calling Protocol (UTCP) 1.0+ specification using a decentralized architecture:
+- Each service serves its own UTCP Manual at the standard `/utcp` endpoint
+- No central registry service required
+- Tools are discovered by fetching UTCP manuals directly from service endpoints
+- Each tool is identified with a namespaced identifier (e.g., `filesystem.read_file`)
+
+#### EnhancedOrchestratorAgent
+The main processing component that:
+- Implements `process_prompt_with_context_management` method that handles context overflow prevention
+- Uses token counting with the `PromptManager` to ensure prompts stay within model limits
+- Includes automatic fallback to Markovian thinking or direct model response based on prompt complexity
+- Integrates with ArchivistClient for knowledge retrieval while managing context size
+- Manages model lifecycle through the `ModelManager` class for on-demand execution
+
+## Performance Optimization
+
+The ECE uses a hybrid development model to achieve required performance:
+- **Python**: Used for high-level orchestration and non-performance-critical logic
+- **C++/Cython**: Performance-critical components identified through profiling are rewritten in C++
+- **Profiling-Driven Development**: Regular performance profiling with cProfile and snakeviz to identify and address bottlenecks
+- **GPU Acceleration**: CUDA support for accelerated embedding generation
+- **On-Demand Model Execution**: Optimizes resource usage by starting models only when needed
+
+## Context Loading Sequence
+
+The ECE implements a specific context loading order to ensure consistent persona and memory across interactions:
+1. **POML/JSON Persona**: Loaded first to establish identity and protocols
+2. **Redis Context**: Conversation history and contextual information
+3. **Current Prompt**: The immediate task or query
+4. **Tool Outputs**: Additional information from web search, file operations, etc.
+
+This architecture ensures that regardless of which model is selected via the dynamic model selection system, the persona defined in the POML files remains consistent and forms the foundational layer for all responses.
+
+## API Endpoints
+
+The orchestrator (port 8000) provides the following endpoints:
+- `POST /process_prompt`: Process user prompts with context management
+- `GET /v1/models`: List available models from the configured LLM provider
+- `GET /models/available`: List models from the models directory
+- `GET /models/current`: Get currently active model
+- `POST /models/select`: Select and start a specific model
+- `POST /models/start`: Start a specific model server
+- `POST /models/stop`: Stop the currently running model server
+- `GET /models/status`: Get status of model management system
+- `GET /health`: Health check endpoint

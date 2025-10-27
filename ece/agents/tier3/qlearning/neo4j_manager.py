@@ -6,12 +6,19 @@ for the QLearningAgent's graph navigation functionality.
 """
 
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from neo4j import GraphDatabase
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('neo4j_manager')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 
 class Neo4jManager:
@@ -24,18 +31,19 @@ class Neo4jManager:
     - Read and write Q-values as relationship properties
     """
 
-    def __init__(self, uri: str, user: str, password: str):
+    def __init__(self, uri: str = None, user: str = None, password: str = None):
         """
         Initialize the Neo4jManager with connection parameters.
         
         Args:
-            uri: The Neo4j database URI
-            user: The Neo4j username
-            password: The Neo4j password
+            uri: The Neo4j database URI (defaults to environment variables)
+            user: The Neo4j username (defaults to environment variables)
+            password: The Neo4j password (defaults to environment variables)
         """
-        self.uri = uri
-        self.user = user
-        self.password = password
+        # Get connection details from environment variables with defaults
+        self.uri = uri or os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
+        self.user = user or os.environ.get('NEO4J_USER', 'neo4j')
+        self.password = password or os.environ.get('NEO4J_PASSWORD', 'ECE_secure_password_2025')
         self._driver = None
 
     def connect(self) -> None:

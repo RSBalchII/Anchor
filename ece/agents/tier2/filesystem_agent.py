@@ -20,9 +20,15 @@ from utcp.data.utcp_manual import UtcpManual
 from utcp.data.tool import Tool
 from utcp_http.http_call_template import HttpCallTemplate
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('filesystem')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -59,7 +65,7 @@ class FileSystemAgent:
         self.name = "FileSystemAgent"
         self.version = "1.0.0"
 
-    def list_directory(self, path: str = ".", include_hidden: bool = False) -> Dict[str, Any]:
+    def list_directory(self, *, path: str = ".", include_hidden: bool = False) -> Dict[str, Any]:
         """
         List the contents of a directory.
         
@@ -112,7 +118,7 @@ class FileSystemAgent:
                 "timestamp": __import__('datetime').datetime.now().isoformat()
             }
 
-    def read_file(self, file_path: str) -> Dict[str, Any]:
+    def read_file(self, *, file_path: str) -> Dict[str, Any]:
         """
         Read the contents of a file.
         
@@ -146,7 +152,7 @@ class FileSystemAgent:
                 "timestamp": __import__('datetime').datetime.now().isoformat()
             }
 
-    def write_file(self, file_path: str, content: str) -> Dict[str, Any]:
+    def write_file(self, *, file_path: str, content: str) -> Dict[str, Any]:
         """
         Write content to a file.
         
@@ -179,7 +185,7 @@ class FileSystemAgent:
                 "timestamp": __import__('datetime').datetime.now().isoformat()
             }
 
-    def execute_command(self, command: str) -> Dict[str, Any]:
+    def execute_command(self, *, command: str) -> Dict[str, Any]:
         """
         Execute a shell command.
         
@@ -246,7 +252,7 @@ async def list_directory_endpoint(request: ListDirectoryRequest):
         Directory listing result
     """
     try:
-        result = fs_agent.list_directory(request.path, request.include_hidden)
+        result = fs_agent.list_directory(path=request.path, include_hidden=request.include_hidden)
         return result
     except Exception as e:
         logger.error(f"Error listing directory: {str(e)}")
@@ -264,7 +270,7 @@ async def read_file_endpoint(request: ReadFileRequest):
         File content result
     """
     try:
-        result = fs_agent.read_file(request.file_path)
+        result = fs_agent.read_file(file_path=request.file_path)
         return result
     except Exception as e:
         logger.error(f"Error reading file: {str(e)}")
@@ -282,7 +288,7 @@ async def write_file_endpoint(request: WriteFileRequest):
         Write operation result
     """
     try:
-        result = fs_agent.write_file(request.file_path, request.content)
+        result = fs_agent.write_file(file_path=request.file_path, content=request.content)
         return result
     except Exception as e:
         logger.error(f"Error writing file: {str(e)}")
@@ -300,7 +306,7 @@ async def execute_command_endpoint(request: ExecuteCommandRequest):
         Command execution result
     """
     try:
-        result = fs_agent.execute_command(request.command)
+        result = fs_agent.execute_command(command=request.command)
         return result
     except Exception as e:
         logger.error(f"Error executing command: {str(e)}")
@@ -373,7 +379,8 @@ async def utcp_manual():
                     name="filesystem_list_directory",
                     call_template_type="http",
                     url="http://localhost:8006/list_directory",
-                    http_method="POST"
+                    http_method="POST",
+                    content_type="application/json"
                 )
             ),
             Tool(
@@ -423,7 +430,8 @@ async def utcp_manual():
                     name="filesystem_read_file",
                     call_template_type="http",
                     url="http://localhost:8006/read_file",
-                    http_method="POST"
+                    http_method="POST",
+                    content_type="application/json"
                 )
             ),
             Tool(
@@ -473,7 +481,8 @@ async def utcp_manual():
                     name="filesystem_write_file",
                     call_template_type="http",
                     url="http://localhost:8006/write_file",
-                    http_method="POST"
+                    http_method="POST",
+                    content_type="application/json"
                 )
             ),
             Tool(
@@ -527,7 +536,8 @@ async def utcp_manual():
                     name="filesystem_execute_command",
                     call_template_type="http",
                     url="http://localhost:8006/execute_command",
-                    http_method="POST"
+                    http_method="POST",
+                    content_type="application/json"
                 )
             )
         ]
@@ -539,7 +549,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "filesystem_agent:app",
         host="0.0.0.0",
-        port=8005,
+        port=8006,
         reload=True,
         log_level="info"
     )

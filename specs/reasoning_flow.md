@@ -52,38 +52,40 @@ The EnhancedOrchestratorAgent implements an alternative reasoning flow that proc
 1.  **Initialize Orchestrator:**
 
       * When a request comes in, the system creates a new instance of `EnhancedOrchestratorAgent` with a unique session ID.
-      * The orchestrator loads configuration and initializes necessary components including `PromptManager` for context overflow prevention, `ArchivistClient` for knowledge retrieval, specialized thinkers, TRM Client for Markovian reasoning, and MarkovianThinker for chunked processing.
+      * The orchestrator loads the POML/JSON persona file FIRST to establish the foundational identity, protocols, and operational context.
+      * The orchestrator then loads configuration and initializes necessary components including `PromptManager` for context overflow prevention, `ArchivistClient` for knowledge retrieval, specialized thinkers, TRM Client for Markovian reasoning, MarkovianThinker for chunked processing, and `ModelManager` for on-demand model execution.
 
 2.  **Reasoning Path Decision:**
 
-      * The `process_prompt_with_context_management` method is called with the user prompt.
+      * The `process_prompt_with_context_management` method is called with user prompt after persona has been established.
       * The `ReasoningAnalyzer` determines if the prompt requires Markovian thinking based on complexity indicators (e.g., "analyze", "evaluate", "compare", "strategy", "methodology") or length.
-      * If Markovian thinking is needed, the system follows the Markovian reasoning flow; otherwise, it follows the parallel thinking flow.
+      * If Markovian thinking is needed, the system follows the Markovian reasoning flow; otherwise, it follows the direct model response flow (replacing the original parallel thinking flow).
 
 3.  **Markovian Thinking Flow (for complex prompts):**
 
       * The system retrieves relevant context from the knowledge graph using the `ArchivistClient`.
       * The `MarkovianThinker` processes the prompt using fixed-size chunks (default 8K tokens) with textual carryover (default 4K tokens).
-      * Within each chunk, reasoning proceeds normally.
+      * Each chunk of reasoning maintains the persona established from the POML file as the foundational identity.
+      * Within each chunk, reasoning proceeds normally while maintaining the established persona.
       * At chunk boundaries, the context is reset and reinitialized with the original query plus a short textual carryover from the previous chunk.
-      * The policy learns through this process to write textual states that enable seamless continuation of reasoning after reset.
-      * This creates linear compute scaling with constant memory usage relative to thinking length.
+      * The policy learns through this process to write textual states that enable seamless continuation of reasoning after reset while maintaining persona consistency.
+      * This creates linear compute scaling with constant memory usage relative to thinking length while preserving the established persona.
+      * Before processing, the `ModelManager` ensures an appropriate model server is running.
 
-4.  **Parallel Thinking Flow (for simpler prompts):**
+4.  **Direct Model Response Flow (for simpler prompts):**
 
       * The system retrieves relevant context from the knowledge graph using the `ArchivistClient`.
-      * The `PromptManager` prepares the prompt safely, handling potential context overflow issues.
+      * The `PromptManager` prepares the prompt safely, handling potential context overflow issues while maintaining persona context.
       * Context usage statistics are logged.
-      * The system engages multiple specialized thinkers in parallel to process the prompt.
-      * Each thinker provides insights from their specific perspective or expertise area.
-      * Errors from individual thinkers are handled gracefully.
-      * The system combines insights from all valid thinkers into a single context.
-      * The synthesis thinker creates a coherent, comprehensive response that addresses the original query using all gathered insights.
+      * The system uses direct model response (not parallel thinking) to process the prompt, with the `ModelManager` ensuring an appropriate model is running.
+      * The `ModelManager` handles starting/stopping of model servers as needed for resource optimization.
+      * The complete context is sent to the model for processing.
 
 5.  **Response Generation:**
 
-      * The final response is returned to the requesting endpoint.
-      * If Markovian reasoning fails, the system falls back to parallel thinking.
+      * The final response is returned to the requesting endpoint while maintaining persona consistency.
+      * If Markovian reasoning fails, the system falls back to direct model response while preserving the persona established from the POML file.
+      * The `ModelManager` may shut down the model server after processing if configured for on-demand execution.
 
 # Multi-Agent Coordination & Emergence
 
@@ -93,27 +95,214 @@ Based on research findings from "Emergent Coordination in Multi-Agent Language M
 
 1.  **Thinker Personas:**
 
-      * Each thinker is assigned a detailed persona with background, expertise, and personality traits (e.g., "Elena the Innovation Consultant", "Marcus the Risk Manager").
+      * Each thinker agent is assigned a detailed persona with background, expertise, and personality traits to create stable identity-linked differentiation.
       * These personas create stable identity-linked differentiation, allowing each agent to develop specialized roles.
 
 2.  **Theory of Mind (ToM) Integration:**
 
+      * Thinker agents are instructed to consider what other agents might do and how their actions might affect the group outcome, enabling more effective collaboration.
       * During the thinking process, each agent receives instructions about the roles and likely approaches of other agents.
-      * Agents are prompted to consider what other agents might do and how their actions might affect the group outcome.
+
+3.  **Role Complementarity:**
+
+      * Different thinkers are assigned complementary roles (Optimist, Pessimist, Analytical, Creative, Pragmatic, Strategic, Ethical) to ensure diverse perspectives contribute to the solution.
       * This enables more effective collaboration and role complementarity.
 
-3.  **Coordination Analysis:**
+4.  **Coordination Analysis:**
 
-      * The system measures synergy, diversity, and complementarity among thinker agents after they generate their responses.
+      * The system includes metrics to measure synergy, diversity, and complementarity among thinker agents to ensure productive collective intelligence.
       * These metrics help ensure that the collective intelligence is productive rather than spurious.
 
-4.  **Emergent Behavior Steering:**
+5.  **Emergent Behavior Steering:**
 
-      * Through prompt design and role assignments, the system steers emergent behavior toward goal-directed synergy.
+      * Prompt design and role assignments are used to steer the system from mere aggregates to higher-order collectives with coordinated behavior.
       * This ensures that the collective intelligence is aligned with task objectives and creates complementary contributions across agents.
 
-5.  **Synergy and Performance:**
+# UTCP Implementation & Decentralized Architecture
 
-      * The system measures both redundancy (alignment on shared objectives) and synergy (complementary contributions).
-      * Performance benefits emerge when systems achieve both redundancy and synergistic integration.
-      * This mirrors principles of collective intelligence in human groups that effective performance requires both alignment and complementary contributions.
+The ECE now fully implements the Universal Tool Calling Protocol (UTCP) 1.0+ specification using a decentralized architecture:
+
+**Problem:** How to enable reliable, scalable tool discovery and execution across the multi-agent system without dependency on a central registry.
+
+1.  **Decentralized Tool Discovery:**
+
+      * Each service serves its own UTCP Manual at the standard `/utcp` endpoint.
+      * The orchestrator connects directly to individual service endpoints rather than a centralized registry.
+      * Services include: Distiller (port 8001), QLearning (port 8002), Archivist (port 8003), Injector (port 8004), FileSystem (port 8006), and WebSearch (port 8007).
+
+2.  **Direct Service Communication:**
+
+      * Tools are discovered by fetching UTCP manuals directly from service endpoints.
+      * Each tool is identified with a namespaced identifier (e.g., `filesystem.read_file`).
+      * This approach provides better reliability, scalability, and eliminates single points of failure.
+
+3.  **Forge-CLI Integration:**
+
+      * The forge-cli can discover and use tools from all running ECE agents.
+      * Tools are dynamically discovered at runtime, allowing for flexible system composition.
+
+4.  **Improved Error Handling:**
+
+      * Better error reporting when UTCP endpoints are unavailable.
+      * Fallback mechanisms when individual services are not accessible.
+
+# Temporal Context Integration
+
+The ECE's temporal memory system enhances reasoning by providing chronological context:
+
+**Problem:** How to maintain and leverage temporal relationships between pieces of information in the knowledge graph to improve context retrieval and reasoning.
+
+1.  **Temporal Spine Construction:**
+
+      * The Archivist Agent continuously monitors the Redis cache and builds a chronological spine in the Neo4j knowledge graph.
+      * The spine consists of hierarchical Year -> Month -> Day nodes connected by `[:HAS_MONTH]` and `[:HAS_DAY]` relationships.
+
+2.  **Memory Linking:**
+
+      * Each processed memory is linked to the appropriate Day node via `[:OCCURRED_AT]` relationships.
+      * This provides temporal context that can be leveraged during context retrieval and reasoning.
+
+3.  **Temporal Querying:**
+
+      * The QLearningAgent can traverse the temporal spine to find contextually relevant memories within specific timeframes.
+      * This enables more accurate and contextually appropriate responses based on when information was processed.
+
+4.  **Continuous Monitoring:**
+
+      * The Archivist runs as a persistent background process, scanning Redis cache for new entries at regular intervals.
+      * This ensures that all processed information is consistently linked to its temporal context.
+
+# Minimal Launcher & Debug Launcher
+
+The ECE now includes both a minimal launcher system and a debug launcher system that focus on what's needed to run the models and ECE services:
+
+**Problem:** How to ensure that the launcher system exhibits coordinated behavior rather than just acting as a collection of individual scripts.
+
+1.  **Launcher Personas:**
+
+      * Each launcher script is assigned a detailed persona with background, expertise, and personality traits to create stable identity-linked differentiation.
+      * These personas create stable identity-linked differentiation, allowing each script to develop specialized roles.
+
+2.  **Theory of Mind (ToM) Integration:**
+
+      * Launcher scripts are instructed to consider what other scripts might do and how their actions might affect the group outcome, enabling more effective collaboration.
+      * During the launching process, each script receives instructions about the roles and likely approaches of other scripts.
+
+3.  **Role Complementarity:**
+
+      * Different launcher scripts are assigned complementary roles (Minimal Launcher, Debug Launcher, Bat Launcher, PS1 Launcher, Python Launcher, Shell Launcher) to ensure diverse perspectives contribute to the solution.
+      * This enables more effective collaboration and role complementarity.
+
+4.  **Coordination Analysis:**
+
+      * The system includes metrics to measure synergy, diversity, and complementarity among launcher scripts to ensure productive collective intelligence.
+      * These metrics help ensure that the collective intelligence is productive rather than spurious.
+
+5.  **Emergent Behavior Steering:**
+
+      * Script design and role assignments are used to steer the system from mere aggregates to higher-order collectives with coordinated behavior.
+      * This ensures that the collective intelligence is aligned with task objectives and creates complementary contributions across scripts.
+
+6.  **Cross-Platform Compatibility:**
+
+      * The launcher system works from any directory on Windows, Linux, and macOS.
+      * This ensures consistent behavior across different platforms.
+
+7.  **Visible Terminal Output:**
+
+      * All launcher scripts now show output directly in the terminal for debugging purposes.
+      * This makes it easier to troubleshoot issues during the launching process.
+
+8.  **Automatic Service Management:**
+
+      * The launcher automatically detects and manages required services (Docker, Neo4j, Redis, Llama.cpp servers).
+      * This reduces the burden on users to manually manage services.
+
+# Debug Launcher & Emergence
+
+The ECE now includes a debug launcher system that provides enhanced visibility into ECE agents' operations by displaying all output directly in the terminal, which is invaluable for troubleshooting and development:
+
+**Problem:** How to ensure that the debug launcher system exhibits coordinated behavior rather than just acting as a collection of individual scripts.
+
+1.  **Debug Launcher Personas:**
+
+      * Each debug launcher script is assigned a detailed persona with background, expertise, and personality traits to create stable identity-linked differentiation.
+      * These personas create stable identity-linked differentiation, allowing each script to develop specialized roles.
+
+2.  **Theory of Mind (ToM) Integration:**
+
+      * Debug launcher scripts are instructed to consider what other scripts might do and how their actions might affect the group outcome, enabling more effective collaboration.
+      * During the debugging process, each script receives instructions about the roles and likely approaches of other scripts.
+
+3.  **Role Complementarity:**
+
+      * Different debug launcher scripts are assigned complementary roles (Bat Debug Launcher, PS1 Debug Launcher) to ensure diverse perspectives contribute to the solution.
+      * This enables more effective collaboration and role complementarity.
+
+4.  **Coordination Analysis:**
+
+      * The system includes metrics to measure synergy, diversity, and complementarity among debug launcher scripts to ensure productive collective intelligence.
+      * These metrics help ensure that the collective intelligence is productive rather than spurious.
+
+5.  **Emergent Behavior Steering:**
+
+      * Script design and role assignments are used to steer the system from mere aggregates to higher-order collectives with coordinated behavior.
+      * This ensures that the collective intelligence is aligned with task objectives and creates complementary contributions across scripts.
+
+6.  **Cross-Platform Compatibility:**
+
+      * The debug launcher system works from any directory on Windows, Linux, and macOS.
+      * This ensures consistent behavior across different platforms.
+
+7.  **Visible Terminal Output:**
+
+      * All debug launcher scripts now show output directly in the terminal for debugging purposes.
+      * This makes it easier to troubleshoot issues during the debugging process.
+
+8.  **Automatic Service Management:**
+
+      * The debug launcher automatically detects and manages required services (Docker, Neo4j, Redis, Llama.cpp servers).
+      * This reduces the burden on users to manually manage services.
+
+9.  **Enhanced Debugging:**
+
+      * The debug launcher provides enhanced debugging capabilities by showing all agent output directly in the terminal.
+      * This makes it easier to identify configuration or connectivity issues.
+      * This provides educational value for new developers to understand ECE system behavior.
+
+# Clarification on Markovian Reasoning Implementation
+
+There appears to be some confusion about what constitutes the Markovian reasoning implementation in the ECE system. I'd like to clarify the distinction between different components:
+
+### The Actual Markovian Reasoning Implementation:
+The Markovian reasoning algorithm is specifically implemented in `ece/agents/common/markovian_thinker.py` and consists of:
+
+1. **MarkovianConfig Class**: Configures the reasoning process with parameters like:
+   - `thinking_context_size`: Size of each reasoning chunk (C in the paper)
+   - `markovian_state_size`: Size of carryover tokens (m in the paper) 
+   - `iteration_cap`: Maximum number of chunks (I in the paper)
+   - Other parameters for temperature, retries, etc.
+
+2. **MarkovianThinker Class**: Implements the core algorithm that:
+   - Processes reasoning in fixed-size chunks
+   - Resets context at chunk boundaries
+   - Uses textual carryover state to maintain reasoning thread between chunks
+   - Executes the markovian_reasoning_loop() to generate responses in chunks
+   - Combines all generated text from the trace into a final response
+
+3. **ReasoningAnalyzer Class**: Determines when to use Markovian thinking based on:
+   - Complexity indicators in the prompt
+   - Prompt length thresholds
+   - Keywords that suggest deep reasoning is needed
+
+### Context Management (NOT Markovian Reasoning):
+- **Redis**: Used for caching and temporary storage of context data
+- **Neo4j**: Used for knowledge graph storage and complex relationship queries
+- These are external infrastructure components that support the broader ECE system but are NOT the Markovian reasoning algorithm itself
+
+### Distinction:
+- Markovian Reasoning is an algorithmic approach for long-form reasoning using chunked generation with carryover states
+- Redis and Neo4j are infrastructure components for data storage and retrieval
+- These serve different purposes: Markovian reasoning handles long-form thought processes, while Redis/Neo4j handle data persistence and context retrieval
+
+The Markovian reasoning implementation follows the research paper's approach of enabling extremely long reasoning by processing in fixed-size chunks while maintaining a textual carryover state between chunks. This is completely separate from the context caching and storage functionality provided by Redis and Neo4j.

@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "SafetyAgent",
+    "description": "",
+    "author": "",
+    "tags": [],
+    "type": "Specialist Agent"
+  },
+  "components": [
+    {
+      "type": "task",
+      "attributes": {
+        "priority": "0"
+      },
+      "content": "Ensure safety and appropriateness of content and responses."
+    }
+  ],
+  "stylesheets": []
+}

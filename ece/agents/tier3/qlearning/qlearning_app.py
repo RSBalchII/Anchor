@@ -18,9 +18,15 @@ from utcp.data.utcp_manual import UtcpManual
 from utcp.data.tool import Tool
 from utcp_http.http_call_template import HttpCallTemplate
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('qlearning')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -32,7 +38,7 @@ app = FastAPI(
 # Get Neo4j connection details from environment variables, with defaults for local development
 neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
 neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
-neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
+neo4j_password = os.environ.get('NEO4J_PASSWORD', 'ECE_secure_password_2025')
 
 # Create an instance of the Neo4jManager and connect to the database
 graph_manager = Neo4jManager(uri=neo4j_uri, user=neo4j_user, password=neo4j_password)

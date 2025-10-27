@@ -3,9 +3,15 @@ import logging
 from datetime import datetime
 from ece.agents.tier3.injector.db_manager import Neo4jManager # Import the Neo4jManager
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('injector')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 class InjectorAgent:
     """

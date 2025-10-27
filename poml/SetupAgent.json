@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "SetupAgent",
+    "description": "",
+    "author": "",
+    "tags": [],
+    "type": "Specialist Agent"
+  },
+  "components": [
+    {
+      "type": "task",
+      "attributes": {
+        "priority": "0"
+      },
+      "content": "Handle project initialization and configuration tasks."
+    }
+  ],
+  "stylesheets": []
+}

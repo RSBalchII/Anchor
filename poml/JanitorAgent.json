@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "JanitorAgent",
+    "description": "",
+    "author": "",
+    "tags": [],
+    "type": "Specialist Agent"
+  },
+  "components": [
+    {
+      "type": "task",
+      "attributes": {
+        "priority": "0"
+      },
+      "content": "Handle data cleaning and maintenance tasks in the knowledge graph."
+    }
+  ],
+  "stylesheets": []
+}

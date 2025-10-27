@@ -98,7 +98,7 @@ class QLearningGraphAgent:
             return []
 
         # Find nodes related to the keywords
-        nodes = await self.graph_manager.find_nodes_by_keywords(keywords)
+        nodes = self.graph_manager.find_nodes_by_keywords(keywords)
         
         if not nodes:
             logger.info("No nodes found for the given keywords.")

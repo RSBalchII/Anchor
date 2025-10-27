@@ -1,0 +1,55 @@
+version: '3.8'
+
+# This file manages the external infrastructure needed by the ECE.
+# The ECE application itself runs on the host machine.
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    ports:
+      - "7474:7474"      # HTTP
+      - "7687:7687"      # Bolt
+    volumes:
+      - neo4j_data:/data
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}  # Uses credentials from .env file
+      # Limit Neo4j memory usage to reduce overall footprint
+      - NEO4J_server_memory_heap_max__size=512M
+      - NEO4J_server_memory_pagecache_size=256M
+    networks:
+      - ece-network
+    # Limit container memory to 1GB to prevent excessive usage
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  redis:
+    image: redislabs/redisearch:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ece-network
+    # Limit container memory to 512MB to prevent excessive usage
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+networks:
+  ece-network:
+    driver: bridge
+
+volumes:
+  neo4j_data:
+    # This volume persists the Neo4j database data across container restarts.
+  redis_data:
+    # This volume persists the Redis data across container restarts.

@@ -12,6 +12,10 @@ from pydantic import BaseModel
 from typing import Dict, Any
 import logging
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 # Import the WebSearchAgent
 from ece.agents.tier2.web_search_agent import WebSearchAgent
 
@@ -20,9 +24,15 @@ from utcp.data.utcp_manual import UtcpManual
 from utcp.data.tool import Tool
 from utcp_http.http_call_template import HttpCallTemplate
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Import and set up ECE logging system
+try:
+    from ece.common.logging_config import get_logger
+    logger = get_logger('web_search')
+except ImportError:
+    # Fallback if logging config not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    logger.warning("Could not import ECE logging system, using default logging")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -37,7 +47,7 @@ if not tavily_api_key:
     logger.warning("TAVILY_API_KEY not found in environment variables. Web search functionality will be limited.")
 
 # Create an instance of the WebSearchAgent
-web_search_agent = WebSearchAgent(model="nuextract:3.8b-q4_K_M", tavily_api_key=tavily_api_key)
+web_search_agent = WebSearchAgent(model="nuextract:3.8b-q4_K_M", tavily_api_key=tavily_api_key, api_base="http://localhost:8085/v1")
 
 class SearchRequest(BaseModel):
     """Model for search requests."""
@@ -68,9 +78,17 @@ async def search(request: SearchRequest):
         logger.info(f"Received search request: {request.query}")
         
         # Call the WebSearchAgent to perform the search
-        result = await web_search_agent.search(request.query)
+        result = await web_search_agent.search(query=request.query)
         
-        return {"success": True, "query": request.query, "result": result}
+        # Extract websites from search results
+        websites_searched = result.get("websites_searched", [])
+        
+        return {
+            "success": True, 
+            "query": request.query, 
+            "result": result.get("answer", ""),
+            "websites_searched": websites_searched
+        }
     except Exception as e:
         logger.error(f"Error performing search: {e}")
         raise HTTPException(status_code=500, detail=f"Error performing search: {str(e)}")
@@ -111,6 +129,11 @@ async def utcp_manual():
                         "result": {
                             "type": "string",
                             "description": "The search results"
+                        },
+                        "websites_searched": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of websites that were searched"
                         },
                         "error": {
                             "type": "string",
