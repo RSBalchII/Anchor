@@ -89,18 +89,24 @@ def main():
         
         def stream_output(pipe, log_file, console_output=True):
             for line in iter(pipe.readline, ''):
+                # Clean line of problematic unicode characters before processing
+                clean_line = line.encode('utf-8', errors='replace').decode('utf-8')
+                
                 if console_output:
                     try:
-                        print(line.rstrip())  # Print to console
+                        print(clean_line.rstrip())  # Print to console
                     except UnicodeEncodeError:
                         # Handle special Unicode characters that can't be printed to console
-                        print(line.encode('utf-8', errors='replace').decode('utf-8'))
+                        clean_for_console = clean_line.encode('utf-8', errors='replace').decode('utf-8')
+                        print(clean_for_console)
+                
                 # Write to log file with proper encoding
                 try:
-                    log_file.write(line)      # Write to log file
+                    log_file.write(clean_line)      # Write to log file
                 except UnicodeEncodeError:
                     # Handle special characters in log file
-                    log_file.write(line.encode('utf-8', errors='replace').decode('utf-8'))
+                    safe_line = clean_line.encode('utf-8', errors='replace').decode('utf-8')
+                    log_file.write(safe_line)
                 log_file.flush()          # Ensure it's written immediately
             pipe.close()
         
