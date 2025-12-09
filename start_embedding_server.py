@@ -10,48 +10,133 @@ import sys
 import subprocess
 from pathlib import Path
 import argparse
+import requests
+
+def download_gemma_model(model_url, download_path):
+    """Download model file with progress indication."""
+    print(f"[DOWNLOAD] Starting download: {model_url}")
+    print(f"[DOWNLOAD] Destination: {download_path}")
+
+    try:
+        response = requests.get(model_url, stream=True)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded = 0
+
+        with open(download_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        print(f"\r[DOWNLOAD] Progress: {percent:.1f}% ({downloaded/1024/1024:.1f}MB/{total_size/1024/1024:.1f}MB)", end='', flush=True)
+
+        print(f"\n[DOWNLOAD] Complete! Model saved to: {download_path}")
+        return True
+    except Exception as e:
+        print(f"\n[DOWNLOAD] Error: {e}")
+        if download_path.exists():
+            download_path.unlink()  # Remove incomplete file
+        return False
 
 def find_gemma_model():
-    """Find the gemma-300m embedding model."""
+    """Find the gemma-300m embedding model, downloading if necessary."""
     # First look in current directory, then in the script's directory
     script_dir = Path(__file__).parent
     possible_dirs = [
         Path("models"),  # Current directory
         script_dir / "models",  # Script's parent directory
-        script_dir.parent / "models",  # Parent of script's directory (if script is in a subdirectory)
+        Path("../models"),  # Parent directory (where your actual models are)
+        Path("C:/Users/rsbiiw/Projects/models"),  # Actual location based on your symlink info
     ]
 
+    # Look for embedding models, starting with gemma-specific ones
+    embedding_files = []
     models_dir = None
-    for dir_path in possible_dirs:
-        if dir_path.exists():
-            models_dir = dir_path
+
+    # Try each possible directory
+    for models_dir in possible_dirs:
+        if models_dir.exists():
+            print(f"[INFO] Searching in: {models_dir}")
+            # Look for embedding models
+            for pattern in ["*embed*.gguf", "*gemma*.gguf", "*nomic*.gguf", "*bge*.gguf"]:
+                found_files = list(models_dir.rglob(pattern))
+                if found_files:
+                    for f in found_files:
+                        try:
+                            # Check if file is accessible (not broken symlink)
+                            if f.exists() and f.is_file() and f.stat().st_size > 0:
+                                embedding_files.append(f)
+                        except (OSError, PermissionError):
+                            continue  # Skip broken symlinks or inaccessible files
+        if embedding_files:
             break
 
-    if models_dir is None:
-        print("[ERROR] Models directory not found in current directory or script location")
-        return None
-
-    # Look for embedding models, starting with gemma-specific ones
-    embedding_files = list(models_dir.rglob("*embed*.gguf"))  # All embedding models
-    gemma_files = []  # Gemma embedding models specifically
-
-    # Check for gemma embedding models
+    # Filter for gemma embedding models specifically
+    gemma_files = []
     for f in embedding_files:
-        if 'gemma' in f.name.lower():
+        f_lower = f.name.lower()
+        if 'gemma' in f_lower and ('embed' in f_lower or 'embedding' in f_lower):
             gemma_files.append(f)
 
-    # If no gemma embedding models found, fall back to any gemma model that might work for embeddings
+    # If no gemma embedding models found, look for any gemma model that might work for embeddings
+    if not gemma_files:
+        for f in embedding_files:
+            if 'gemma' in f.name.lower() and 'embed' not in f.name.lower():
+                gemma_files.append(f)
+
     if gemma_files:
-        return gemma_files[0]  # Return the first gemma embedding model found
+        matched_model = gemma_files[0]
+        print(f"[FOUND] Gemma embedding model found: {matched_model}")
+        print(f"   - Full path: {matched_model.resolve()}")
+        try:
+            file_size = matched_model.stat().st_size
+            print(f"   - Size: {file_size / (1024*1024):.1f} MB")
+            return matched_model
+        except OSError:
+            print(f"[WARN] Cannot access file: {matched_model}")
 
-    # If no embedding models at all, look for any gemma model that might work
-    all_gemma = list(models_dir.rglob("*gemma*.gguf"))
-    if all_gemma:
-        return all_gemma[0]  # Return the first gemma model found
+    # If not found in any directory, create local models dir for download
+    local_models_dir = Path("models")
+    if not local_models_dir.exists():
+        local_models_dir.mkdir(exist_ok=True)
 
-    print("[ERROR] No gemma embedding model found in models/ directory")
-    print("[HELP] Expected files like: gemma-300m.gguf, embeddinggemma*.gguf, etc.")
-    print(f"[INFO] Available models in models/: {[f.name for f in models_dir.rglob('*.gguf')]}")
+    # Model not found, need to download
+    print("[INFO] No gemma embedding model found, starting download...")
+
+    # Look for the specific Google EmbeddingGemma-300M model first (the one specifically requested)
+    model_urls = [
+        # Google's EmbeddingGemma-300M model (the exact one requested)
+        ("https://huggingface.co/google/embeddinggemma-300m-GGUF/resolve/main/embeddinggemma-300m-f32.gguf", "embeddinggemma-300m-f32.gguf"),
+        ("https://huggingface.co/google/embeddinggemma-300m-GGUF/resolve/main/embeddinggemma-300m-q8.gguf", "embeddinggemma-300m-q8.gguf"),
+        ("https://huggingface.co/google/embeddinggemma-300m-GGUF/resolve/main/embeddinggemma-300m-q4k.gguf", "embeddinggemma-300m-q4k.gguf"),
+        # Fallback: BGE models if the specific one isn't available
+        ("https://huggingface.co/BAAI/bge-large-en-v1.5-GGUF/resolve/main/bge-large-en-v1.5.Q4_K_M.gguf", "bge-large-en-v1.5.Q4_K_M.gguf"),
+        ("https://huggingface.co/BAAI/bge-base-en-v1.5-GGUF/resolve/main/bge-base-en-v1.5.Q4_K_M.gguf", "bge-base-en-v1.5.Q4_K_M.gguf"),
+        # Fallback: Nomic embed text
+        ("https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_K_M.gguf", "nomic-embed-text-v1.5.Q4_K_M.gguf"),
+    ]
+
+    # Try downloading each model until one succeeds
+    for model_url, filename in model_urls:
+        model_path = local_models_dir / filename  # Download to local models directory
+        print(f"[INFO] Trying to download: {filename}")
+        print(f"[INFO] URL: {model_url}")
+        if download_gemma_model(model_url, model_path):
+            print(f"[SUCCESS] Model download completed: {model_path}")
+            return model_path
+        else:
+            print(f"[ERROR] Failed to download: {filename}")
+            if model_path.exists():
+                model_path.unlink()  # Remove failed download
+            continue  # Try next model
+
+    # If all downloads failed
+    print("[ERROR] Could not download any suitable embedding model")
+    print("[HELP] Expected files like: gemma-300m.gguf, nomic-embed-text*.gguf, bge-*.gguf, etc.")
+    print(f"[INFO] Available models in local models/: {[f.name for f in local_models_dir.rglob('*.gguf')]}")
     return None
 
 def find_llama_server():

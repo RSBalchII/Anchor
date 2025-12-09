@@ -1,14 +1,14 @@
-# Context-Engine
+# Context-Engine: Infinite Context Pipeline
 
-> **Executive Cognitive Enhancement (ECE)** - A local-first memory system and agentic toolkit for cognitive augmentation.
+> **Executive Cognitive Enhancement (ECE)** - An infinite context system and cognitive augmentation toolkit that solves the traditional LLM context window limitation.
 
-**Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open.
+**Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open. **Infinite context, unlimited conversations.**
 
 ---
 
-## Architecture: Two Components, One System
+## Architecture: Three Components, One System
 
-Context-Engine consists of two primary components working in harmony:
+Context-Engine consists of three primary components working in harmony:
 
 ### 🧠 **The Core** - The Brain
 **Role**: Memory system, reasoning engine, and cognitive orchestration
@@ -33,7 +33,7 @@ Context-Engine consists of two primary components working in harmony:
 
 - **Interface**: Lightweight CLI with streaming responses
 - **Integration**: Connects to ECE_Core API for memory-enhanced conversations
-- **Tool Execution**: Pattern-based tool mode for small models (4B-8B)
+- **Tool Execution**: Pattern-based tool mode for reliable execution
 - **Deployment**: Can be packaged as standalone executable
 
 **Key Features**:
@@ -56,6 +56,25 @@ Context-Engine consists of two primary components working in harmony:
 
 ---
 
+## Infinite Context Pipeline: Hardware + Logic
+
+### 🔧 **Phase 1: Hardware Foundation**
+- **64k Context Window**: All servers now boot with 65,536 token capacity
+- **GPU Optimization**: Full layer offload (99) with Q8 quantized KV cache
+- **Flash Attention**: Enabled for optimal performance with long contexts
+
+### 🧩 **Phase 2: Context Rotation Protocol** 
+- **Context Shifting**: Automatic rotation when context approaches 55k tokens
+- **Intelligent Distillation**: Old context compressed to "Narrative Gists" using Distiller
+- **Persistent Storage**: Gists stored in Neo4j as `:ContextGist` nodes with chronological links
+
+### 🧠 **Phase 3: Graph-R1 Reasoning Enhancement**
+- **Gist Retrieval**: GraphReasoner now searches `:ContextGist` nodes for historical context
+- **Continuity Maintenance**: Maintains reasoning flow across context rotations
+- **Smart Querying**: Enhanced retrieval logic with historical context awareness
+
+---
+
 ## Data Flow
 
 ```
@@ -64,12 +83,12 @@ User Input (Anchor CLI / Extension)
 ECE_Core API (:8000)
     ↓
 ├─ Redis: Check active session cache
-├─ Neo4j: Graph traversal + semantic search
-└─ LLM: Generate response with full context
+├─ Neo4j: Graph traversal + semantic search + ContextGist retrieval
+└─ LLM: Generate response with full context (including historical gists)
     ↓
 Cognitive Agents (optional)
 ├─ Verifier: Fact-check via Empirical Distrust
-├─ Distiller: Summarize and extract entities
+├─ Distiller: Summarize and extract entities + Context Rotation
 └─ Archivist: Maintain freshness, schedule repairs
     ↓
 Response → Anchor → User
@@ -82,7 +101,8 @@ Response → Anchor → User
 ### Current (Production)
 - **Neo4j** (port 7687) - PRIMARY STORAGE
   - All memories, summaries, relationships
-  - Graph-based retrieval with Q-Learning optimization
+  - ContextGist nodes for historical context
+  - Graph-based retrieval with Graph-R1 optimization
 - **Redis** (port 6379) - ACTIVE SESSION CACHE
   - Hot cache for active conversations (24h TTL)
   - Graceful fallback to Neo4j if unavailable
@@ -103,15 +123,15 @@ Response → Anchor → User
 ### Clean Architecture - 3 Main Scripts
 This project now uses a simplified 3-script architecture:
 
-1. **`python start_llm_server.py`** - Interactive LLM server with model selection
-2. **`python start_ece.py`** - ECE Core with integrated MCP memory system  
+1. **`python start_llm_server.py`** - Interactive LLM server with model selection (64k window)
+2. **`python start_ece.py`** - ECE Core with integrated MCP memory system
 3. **`python start_embedding_server.py`** - Auto-selects gemma-300m embedding server
 
 ### Three-Terminal Startup
 
 **Terminal 1 - LLM Server:**
 ```bash
-python start_llm_server.py  # Interactive model selection
+python start_llm_server.py  # Interactive model selection, 64k window
 ```
 
 **Terminal 2 - ECE_Core (The Brain):**
@@ -219,16 +239,22 @@ The scripts perform basic health checks and will wait for LLaMa and ECE Core to 
 ## Documentation
 
 ### Core Specs (Single Source of Truth)
-- `ece-core/specs/spec.md` - Technical architecture
-- `ece-core/specs/plan.md` - Vision, roadmap, ADRs
-- `ece-core/specs/tasks.md` - Implementation backlog
-- `ece-core/specs/TROUBLESHOOTING.md` - Operational debugging
+- `specs/spec.md` - Technical architecture
+- `specs/plan.md` - Vision, roadmap, ADRs
+- `specs/tasks.md` - Implementation backlog
+- `specs/TROUBLESHOOTING.md` - Operational debugging
+
+### Component Specs
+- `backend/specs/spec.md` - Backend technical specs
+- `backend/specs/plan.md` - Backend roadmap
+- `backend/specs/tasks.md` - Backend tasks
+- `anchor/specs/spec.md` - Anchor technical specs
+- `anchor/specs/plan.md` - Anchor roadmap
+- `anchor/specs/tasks.md` - Anchor tasks
 
 ### Supplementary
-- `ece-core/README.md` - ECE_Core quick start
-- `anchor/README.md` - Anchor quick start
-- `ece-core/CHANGELOG.md` - Complete project history
-- `ece-core/archive/README.md` - Archived code explanation
+- `CHANGELOG.md` - Complete project history
+- `archive/README.md` - Archived code explanation
 
 ---
 
@@ -261,14 +287,14 @@ ECE_Core implements an agent-based architecture for memory hygiene and cognitive
 - **Goal**: Reduce hallucinations, increase factual accuracy
 
 ### Distiller Agent
-- **Role**: Memory summarization and compression
+- **Role**: Memory summarization and compression + Context Rotation
 - **Method**: LLM-assisted distillation with salience scoring
-- **Goal**: Maintain high-value context, prune noise
+- **Goal**: Maintain high-value context, prune noise, enable infinite context
 
 ### Archivist Agent
-- **Role**: Knowledge base maintenance and freshness
-- **Method**: Scheduled verification, stale node detection
-- **Goal**: Keep memory graph current and trustworthy
+- **Role**: Knowledge base maintenance and freshness + Context Management
+- **Method**: Scheduled verification, stale node detection, context rotation oversight
+- **Goal**: Keep memory graph current and trustworthy, manage context windows
 
 ### Memory Weaver (Maintenance Engine)
 - **Role**: Automated relationship repair
@@ -332,9 +358,9 @@ pyinstaller anchor.spec
 
 ## Project Status
 
-**Current Phase**: Cognitive Refinement (Phase 4)
-**Version**: ECE_Core 1.0.0, Anchor 0.1.0-alpha
-**Last Updated**: 2025-11-30
+**Current Phase**: Infinite Context Implementation (Phase 5)
+**Version**: Context-Engine 1.0.0, ECE_Core 1.0.0, Anchor 0.1.0-alpha
+**Last Updated**: 2025-12-08
 
 ### ✅ Completed
 - Neo4j + Redis architecture (SQLite removed)
@@ -344,6 +370,7 @@ pyinstaller anchor.spec
 - Traceability & rollback for automated repairs
 - Security hardening (API auth, audit logs)
 - PyInstaller packaging
+- **NEW: Infinite Context Pipeline** (64k windows, context rotation, Graph-R1 integration)
 
 ### 🔄 In Progress
 - Vector adapter + C2C hot-replica for semantic retrieval
@@ -400,7 +427,7 @@ Built for neurodivergent hackers who need their tools to work reliably.
 
 ## Need Help?
 
-- **Operational Issues**: See `ece-core/specs/TROUBLESHOOTING.md`
-- **Architecture Questions**: See `ece-core/specs/spec.md`
-- **Implementation Tasks**: See `ece-core/specs/tasks.md`
-- **Project History**: See `ece-core/CHANGELOG.md`
+- **Operational Issues**: See `specs/TROUBLESHOOTING.md`
+- **Architecture Questions**: See `specs/spec.md`
+- **Implementation Tasks**: See `specs/tasks.md`
+- **Project History**: See `CHANGELOG.md`
