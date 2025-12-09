@@ -8,22 +8,27 @@ server:
 
 llm:
   api_base: "http://localhost:8080/v1"
-  # Reka configuration: 16k context for reasoning chains
-  context_size: 16384
-  max_tokens: 4096       # Increased for long reasoning outputs
-  temperature: 1.0       # Matches server
+  # Optimized for Qwen3-4B-MiniMight with massive context window
+  context_size: 65536      # Increased to 64k for massive context capability (sweet spot for 4B model)
+  max_tokens: 4096         # Increased for longer responses
+  temperature: 1.0         # Matches server
   top_p: 0.95
   timeout: 300
   # Default to 'all' layers on GPU for best performance on consumer RTX 4090
   # NOTE: Set to -1 to place all layers on GPU (may require supported binary)
   gpu_layers: -1
   threads: 8
+  # Chat template configuration
+  chat_template: "qwen3-thinking"   # Switched to qwen3-thinking for better tool support and thinking token handling
+  # Batch size optimizations to conserve VRAM/RAM during processing for large context
+  batch_size: 1024         # Optimized to conserve VRAM/RAM during processing
+  ubatch_size: 1024        # Optimized to conserve VRAM/RAM during processing
 
 memory:
   redis:
     url: "redis://localhost:6379"
     ttl: 3600
-    max_tokens: 16000
+    max_tokens: 32000  # Increased to accommodate larger context windows
     enabled: true
   neo4j:
     uri: "bolt://localhost:7687"
@@ -31,7 +36,7 @@ memory:
     password: "${NEO4J_PASSWORD}"
     database: "neo4j"
     enabled: true
-  max_context_tokens: 24000
+  max_context_tokens: 48000  # Increased to accommodate larger context windows
   summarize_threshold: 14000
 
 context:

@@ -17,7 +17,7 @@ def find_models():
     # Define multiple search directories - including both relative and absolute paths
     model_search_dirs = [
         Path("models").resolve(),  # Default models directory
-        Path("../models").resolve(),  # Common user location
+        Path("../models").resolve(),  # Common user location (where your actual models are)
         Path("../../models").resolve(),  # Another common location
         Path("C:/Users/rsbiiw/Projects/models").resolve(),  # User's actual models directory
         Path("C:/Users/rsbiiw/models").resolve(),  # Alternative common location
@@ -45,7 +45,11 @@ def find_models():
         if models_dir.exists():
             print(f"[INFO] Searching in: {models_dir}")
             for ext in extensions:
-                all_candidates.extend(list(models_dir.rglob(f"*{ext}")))
+                try:
+                    all_candidates.extend(list(models_dir.rglob(f"*{ext}")))
+                except (PermissionError, OSError):
+                    print(f"[WARN] Cannot access directory: {models_dir}")
+                    continue
         else:
             print(f"[WARN] Models directory not found: {models_dir}")
 
@@ -56,17 +60,19 @@ def find_models():
     for candidate in all_candidates:
         try:
             # Only add if it's a real file (not broken symlink) and doesn't contain skip patterns
-            if (candidate.is_file() and
+            if (candidate.is_file() and candidate.exists() and
                 not any(skip in str(candidate).lower() for skip in [
                     'tokenizer', 'config', 'merges', 'vocab', 'special_tokens', 'params'
                 ])):
-                # Use absolute path to avoid duplicates from different search paths
-                abs_path = candidate.resolve()
-                if str(abs_path) not in seen_files:
-                    models.append(candidate)
-                    seen_files.add(str(abs_path))
-        except:
-            continue  # Skip files that cause permission or access issues
+                # Check if file size is valid (not a broken symlink pointing to non-existent file)
+                if candidate.stat().st_size > 0:
+                    # Use absolute path to avoid duplicates from different search paths
+                    abs_path = candidate.resolve()
+                    if str(abs_path) not in seen_files:
+                        models.append(candidate)
+                        seen_files.add(str(abs_path))
+        except (OSError, PermissionError):
+            continue  # Skip files that cause permission or access issues (like broken symlinks)
 
     return sorted(models)
 
@@ -171,52 +177,228 @@ def find_llama_server():
     print("[INFO] Expected at: llama-server.exe (Windows) or ./llama-server (Unix)")
     return None
 
+def get_system_specs():
+    """Get system specifications like RAM, VRAM, CPU info."""
+    import psutil
+    import platform
+
+    specs = {
+        'total_ram_gb': round(psutil.virtual_memory().total / (1024**3), 2),
+        'available_ram_gb': round(psutil.virtual_memory().available / (1024**3), 2),
+        'cpu_count': psutil.cpu_count(),
+        'cpu_freq': psutil.cpu_freq().max if psutil.cpu_freq() else 2.0,  # default to 2.0 GHz
+        'platform': platform.system(),
+        'is_windows': platform.system() == 'Windows'
+    }
+
+    # Try to get VRAM info (this is approximate)
+    specs['vram_gb'] = 16.0  # Default assumption for typical setup
+
+    return specs
+
+def analyze_model(model_path):
+    """Analyze model characteristics based on filename and size."""
+    import re
+    model_name = model_path.name.lower()
+    size_bytes = model_path.stat().st_size
+    size_gb = round(size_bytes / (1024**3), 2)
+
+    characteristics = {
+        'size_gb': size_gb,
+        'is_qwen': 'qwen' in model_name,
+        'is_gemma': 'gemma' in model_name or 'gemma3' in model_name,  # More comprehensive Gemma detection
+        'is_llama': 'llama' in model_name or 'llm' in model_name,
+        'is_moe': 'moe' in model_name or '4x' in model_name or 'california' in model_name,
+        'quantization': 'q8' if 'q8' in model_name else 'q4' if 'q4' in model_name else 'f16' if 'f16' in model_name else 'unknown',
+        'base_model': 'qwen3' if 'qwen3' in model_name else 'gemma3' if 'gemma' in model_name else 'llama' if 'llama' in model_name else 'unknown'
+    }
+
+    return characteristics
+
+def get_optimal_settings(model_char, system_specs):
+    """Get optimal settings based on model characteristics and system specs."""
+    settings = {}
+
+    # Determine context size based on model size and available RAM
+    if model_char['size_gb'] <= 2.0:
+        settings['ctx_size'] = 131072  # 128k for small models
+    elif model_char['size_gb'] <= 4.0:
+        settings['ctx_size'] = 65536   # 64k for 4B models
+    elif model_char['size_gb'] <= 7.0:
+        settings['ctx_size'] = 32768   # 32k for 7B models
+    elif model_char['size_gb'] <= 10.0:
+        settings['ctx_size'] = 16384   # 16k for 10B models (like your 4x3 MoE)
+    else:
+        settings['ctx_size'] = 8192    # 8k for larger models
+
+    # Adjust for available RAM
+    available_ram_gb = system_specs['available_ram_gb']
+    if available_ram_gb < 8:
+        settings['ctx_size'] = max(2048, settings['ctx_size'] // 4)  # Conservative
+    elif available_ram_gb < 16:
+        settings['ctx_size'] = max(4096, settings['ctx_size'] // 2)  # Moderate
+    # If 16GB+ available, keep full context size
+
+    # Determine batch sizes based on model size
+    if model_char['size_gb'] <= 4.0:
+        settings['batch_size'] = 1024
+        settings['ubatch_size'] = 1024
+    elif model_char['size_gb'] <= 7.0:
+        settings['batch_size'] = 512
+        settings['ubatch_size'] = 512
+    else:
+        settings['batch_size'] = 256
+        settings['ubatch_size'] = 256
+
+    # Determine GPU layers based on VRAM
+    vram_gb = system_specs['vram_gb']
+    if vram_gb >= 16:
+        settings['gpu_layers'] = 99  # All layers
+    elif vram_gb >= 8:
+        settings['gpu_layers'] = 35  # Most layers
+    else:
+        settings['gpu_layers'] = 20  # Some layers
+
+    # Determine threads based on CPU count
+    cpu_count = system_specs['cpu_count']
+    settings['threads'] = min(12, max(4, cpu_count - 2))  # Use most but not all cores
+
+    # Model-specific settings
+    if model_char.get('is_qwen', False):
+        settings['pooling'] = 'cls'
+        settings['rope_freq_base'] = 10000
+    elif model_char.get('is_gemma', False):
+        settings['pooling'] = 'cls'
+        settings['rope_freq_base'] = 10000
+    elif model_char.get('is_llama', False):
+        settings['pooling'] = 'mean'
+        settings['rope_freq_base'] = 1000000  # Llama-specific
+    else:
+        # Default values if model type cannot be determined
+        settings['pooling'] = 'cls'
+        settings['rope_freq_base'] = 10000
+
+    return settings
+
+def check_flash_attention_support(llama_server_path):
+    """Check if the llama-server supports the --fa (flash attention) flag."""
+    # Test run with just the --fa flag to see if it's recognized - most reliable method
+    try:
+        # Use a quick test with just --fa flag to check if it's recognized
+        result = subprocess.run([str(llama_server_path), "--fa"],
+                              capture_output=True, text=True, timeout=5)
+        error_text = result.stderr.lower() if result.stderr else ""
+        output_text = result.stdout.lower() if result.stdout else ""
+
+        # If it says "invalid argument", "unknown option", "unrecognized" for --fa, then it's not supported
+        full_output = error_text + output_text
+        if ("invalid argument" in full_output or
+            "unknown" in full_output or
+            "unrecognized" in full_output or
+            "unrecognized option" in full_output or
+            "does not exist" in full_output or
+            "error" in full_output):
+            return False
+        else:
+            # If the exit code is non-zero with just --fa, it's likely not supported
+            return result.returncode == 0
+    except Exception as e:
+        # If test fails completely, assume flash attention is not supported
+        return False
+
 def start_llm_server(model_path, port=8080):
-    """Start llama-server with RTX 4090 optimized settings."""
+    """Start llama-server with system-aware optimized settings."""
     llama_server = find_llama_server()
     if not llama_server:
         return False
-    
-    print(f"\n[INFO] Starting LLM Server with RTX 4090 16GB VRAM optimized settings...")
+
+    print(f"\n[INFO] Analyzing system and model for optimal settings...")
     print(f"   Model: {model_path}")
     print(f"   Port: {port}")
     print(f"   Server: {llama_server}")
-    
-    # RTX 4090 16GB VRAM optimized settings
+
+    # Get system specs and analyze model
+    system_specs = get_system_specs()
+    model_char = analyze_model(model_path)
+
+    print(f"   System RAM: {system_specs['total_ram_gb']}GB | Available: {system_specs['available_ram_gb']}GB")
+    print(f"   CPU Cores: {system_specs['cpu_count']}")
+    print(f"   Model Size: {model_char['size_gb']}GB | Type: {model_char['base_model']}")
+    print(f"   Quantization: {model_char['quantization']}")
+
+    # Get optimal settings
+    optimal_settings = get_optimal_settings(model_char, system_specs)
+
+    print(f"   Optimized Context Size: {optimal_settings['ctx_size']}")
+    print(f"   Optimized Batch Sizes: {optimal_settings['batch_size']}/{optimal_settings['ubatch_size']}")
+
+    # Check for flash attention support
+    fa_support = check_flash_attention_support(llama_server)
+    print(f"   Flash Attention Support: {'Yes' if fa_support else 'No'}")
+
+    # For infinite context work, we use fixed 64k context
+    # But respect the system specs if they indicate limited RAM
+    if system_specs['available_ram_gb'] >= 16:
+        ctx_size = "65536"  # 64k for systems with sufficient RAM
+    elif system_specs['available_ram_gb'] >= 8:
+        ctx_size = "32768"  # 32k for systems with moderate RAM
+    else:
+        ctx_size = "16384"  # 16k for systems with limited RAM
+
+    print(f"   Selected Context Size: {ctx_size} tokens")
+
+    # Build the command with optimal settings
     cmd = [
         str(llama_server),
         "-m", str(model_path),
         "--port", str(port),
-        "--ctx-size", "16384",  # 16k context for reasoning chains
-        "--n-gpu-layers", "99",  # Force full GPU offload for RTX 4090
-        "--threads", "12",       # CPU threads
-        "--batch-size", "2048",  # Large logical batch
-        "--ubatch-size", "2048", # Physical micro-batch (tuned for stability)
-        "--parallel", "1",       # Single parallel slot for 4090 16GB
-        "--mirostat", "2",       # Advanced sampling for Reka-style models
-        "--temp", "1.0",         # Temperature for reasoning models
-        "--cache-type-k", "f16", # KV cache type for RTX 4090
-        "--cache-type-v", "f16", # KV cache type for RTX 4090
-        "--embeddings",          # Enable embeddings for memory operations
-        "--jinja"                # Enable Jinja template support for tools/function calling
+        "--ctx-size", ctx_size,      # Fixed for infinite context work capability
+        "--n-gpu-layers", str(optimal_settings['gpu_layers']),  # Adjusted based on VRAM
+        "--threads", str(optimal_settings['threads']),    # Adjusted based on CPU count
+        "--batch-size", str(optimal_settings['batch_size']),  # Adjusted based on model size
+        "--ubatch-size", str(optimal_settings['ubatch_size']), # Adjusted based on model size
+        "--parallel", "1",          # Single parallel slot (safe default)
+        "--mirostat", "2",          # Advanced sampling
+        "--temp", "1.0",            # Default temperature
+        "--top-p", "0.95",          # Nucleus sampling
+        "--cache-type-k", "q8_0",   # Quantized KV cache to save memory
+        "--cache-type-v", "q8_0",   # Quantized KV cache to save memory
+        "--embeddings",             # Enable embeddings for memory operations
+        "--jinja",                  # Enable Jinja template support for tools/function calling
+        "--rope-scaling", "linear", # Better handling for contexts
     ]
-    
+
+    # Add rope frequency base if available in settings
+    if 'rope_freq_base' in optimal_settings:
+        cmd.extend(["--rope-freq-base", str(optimal_settings['rope_freq_base'])])  # Model-specific
+    else:
+        cmd.extend(["--rope-freq-base", "10000"])  # Default value
+
+    # Add flash attention flag if supported
+    if fa_support:
+        cmd.append("--fa")          # Flash Attention for better performance
+
+    # Add model-specific pooling
+    if 'pooling' in optimal_settings:
+        cmd.extend(["--pooling", optimal_settings['pooling']])
+
     print(f"\n[DEBUG] Command: {' '.join(cmd)}")
     print("\n[INFO] Starting server... (this may take a moment to load the model)")
-    
+
     try:
         # Start the server process
         process = subprocess.Popen(cmd)
-        
+
         # Wait for user to stop the server
         print(f"\n[SUCCESS] Server started successfully!")
         print(f"   - API available at: http://localhost:{port}")
         print(f"   - Health check: curl http://localhost:{port}/v1/models")
+        print(f"   - Optimized for: {model_char['base_model']} model ({model_char['size_gb']}GB)")
         print("\n[INFO] Press Ctrl+C to stop the server")
-        
+
         # Wait for process to complete (or be interrupted)
         process.wait()
-        
+
     except KeyboardInterrupt:
         print(f"\n[INFO] Shutting down LLM server...")
         process.terminate()
@@ -225,7 +407,7 @@ def start_llm_server(model_path, port=8080):
         except subprocess.TimeoutExpired:
             process.kill()
         print("[SUCCESS] Server stopped")
-    
+
     return True
 
 def main():

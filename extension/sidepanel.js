@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': 'Bearer secret-token' // Hardcoded for now, should be config
+                    'Authorization': 'Bearer secret-token'
                 },
                 body: JSON.stringify({
                     content: response.content,
@@ -254,10 +254,13 @@ document.addEventListener('DOMContentLoaded', () => {
             payloadMessages.splice(payloadMessages.length - 1, 0, contextMessage);
         }
 
-        try:
+        try {
             const response = await fetch('http://127.0.0.1:8000/chat/stream', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer secret-token'
+                },
                 body: JSON.stringify({
                     session_id: "browser-session",
                     message: text,
