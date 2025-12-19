@@ -1,0 +1,1236 @@
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\README.md (Section: ROOT_PROJECT) ---
+
+> **⚠️ ARCHITECTURAL PIVOT:** This project now runs entirely in the browser (WASM/CozoDB). See `tools/` for the active application. The legacy Python/Neo4j backend has been moved to `archive/v1_python_backend/`.
+
+# External Context Engine (ECE) - Browser Native Edition: Infinite Context Pipeline
+
+> **Executive Cognitive Enhancement (ECE)** - A browser-native infinite context system that runs entirely in your browser with zero backend dependencies.
+
+**Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open. **Infinite context, unlimited conversations.**
+
+---
+
+## Architecture: Browser-Native Sovereignty
+
+Context-Engine now runs entirely in your browser with WebGPU-accelerated inference:
+
+### ⚡ **Sovereign Tools** - Browser-Native
+**Role**: Zero-dependency HTML tools with WebGPU inference and WASM memory
+**Location**: `tools/`
+
+- **Memory Architecture**: CozoDB WASM (graph storage) + IndexedDB (persistent)
+- **Inference**: WebLLM with DeepSeek-R1 7B, Qwen 2.5, Gemma 2
+- **Embeddings**: Transformers.js (all-MiniLM-L6-v2)
+- **Interface**: Pure HTML - no servers, no installation
+
+**Key Features**:
+- ✅ Double-click HTML → instant AI with memory
+- ✅ Local inference with WebGPU acceleration
+- ✅ Graph-based memory with vector search
+- ✅ Zero data transmission (completely private)
+- ✅ Corruption recovery with automatic fallback
+
+### 🤖 **Anchor** - The Body
+**Role**: Terminal interface and interaction layer
+**Location**: `anchor/`
+
+- **Interface**: Lightweight CLI with streaming responses
+- **Integration**: Connects to ECE_Core API for memory-enhanced conversations
+- **Tool Execution**: Pattern-based tool mode for reliable execution
+- **Deployment**: Can be packaged as standalone executable
+
+**Key Features**:
+- ✅ Real-time streaming responses
+- ✅ Memory-enhanced conversations
+- ✅ Simple tool mode for reliable tool execution
+- ✅ Security hardening (whitelist, confirmation flows)
+
+### 🌉 **Extension** - The Bridge
+**Role**: Browser integration and active context injection
+**Location**: `extension/`
+
+- **Interface**: Chrome Side Panel with persistent chat
+- **Integration**: Connects to ECE_Core API for context-aware browsing
+- **Ingestion**: "Save to Memory" capability to archive web content and chat transcripts directly to the knowledge graph.
+- **Capabilities**:
+  - 👁️ **Sight**: Reads active page content on demand
+  - 🗣️ **Voice**: Streaming chat interface
+  - ✋ **Hands**: Executes JavaScript actions on the page
+
+### 🛠️ **Sovereign Tools** - The Toolkit
+**Role**: Portable, browser-native inference and diagnostics
+**Location**: `tools/`
+
+**Phase A: Graph-R1 Reasoning Console** (Current)
+- **`model-server-chat.html`** (Canonical) — Full Graph-R1 iterative reasoning with local memory retrieval. This is the primary entry point for Phase A.
+  - Iterative Think→Query→Refine loops (up to 3 iterations)
+  - CozoDB WASM memory engine with 211 ingested memories
+  - DeepSeek-R1 7B reasoning via WebLLM
+  - Reasoning trace audit trail
+  - Pattern-matched response parsing
+- **`sovereign-db-builder.html`** — Data ingestion pipeline for memories and research papers
+- **`model-server-chat.legacy.html`** — Previous simple retrieval+synthesis (archived reference)
+
+**Architecture**: Zero-dependency, offline-capable, "run anywhere" tools. Designed for sovereignty: all data stays local, no backend required.
+
+**Future Phases**:
+- **Phase B**: Test Graph-R1 quality with research papers; measure iteration improvements
+- **Phase C**: Extension Bridge for Gemini injection (3-second pause trigger, context append)
+- **Phase D**: Scale testing and adversarial retrieval (contradiction finding)
+
+---
+
+## Infinite Context Pipeline: Hardware + Logic
+
+### 🔧 **Phase 1: Hardware Foundation**
+- **64k Context Window**: All servers now boot with 65,536 token capacity
+- **GPU Optimization**: Full layer offload (99) with Q8 quantized KV cache
+- **Flash Attention**: Enabled for optimal performance with long contexts
+
+### 🧩 **Phase 2: Context Rotation Protocol** 
+- **Context Shifting**: Automatic rotation when context approaches 55k tokens
+- **Intelligent Distillation**: Old context compressed to "Narrative Gists" using Distiller
+- **Persistent Storage**: Gists stored in Neo4j as `:ContextGist` nodes with chronological links
+
+### 🧠 **Phase 3: Graph-R1 Reasoning Enhancement**
+- **Gist Retrieval**: GraphReasoner now searches `:ContextGist` nodes for historical context
+- **Continuity Maintenance**: Maintains reasoning flow across context rotations
+- **Smart Querying**: Enhanced retrieval logic with historical context awareness
+
+---
+
+## Data Flow
+
+```
+User Input (Anchor CLI / Extension)
+    ↓
+ECE_Core API (:8000)
+    ↓
+├─ Redis: Check active session cache
+├─ Neo4j: Graph traversal + semantic search + ContextGist retrieval
+└─ LLM: Generate response with full context (including historical gists)
+    ↓
+Cognitive Agents (optional)
+├─ Verifier: Fact-check via Empirical Distrust
+├─ Distiller: Summarize and extract entities + Context Rotation
+└─ Archivist: Maintain freshness, schedule repairs
+    ↓
+Response → Anchor → User
+```
+
+---
+
+## Memory Architecture
+
+### Current (Production)
+- **Neo4j** (port 7687) - PRIMARY STORAGE
+  - All memories, summaries, relationships
+  - ContextGist nodes for historical context
+  - Graph-based retrieval with Graph-R1 optimization
+- **Redis** (port 6379) - ACTIVE SESSION CACHE
+  - Hot cache for active conversations (24h TTL)
+  - Graceful fallback to Neo4j if unavailable
+
+### Deprecated
+- ~~**SQLite**~~ - Fully removed 2025-11-13, migrated to Neo4j
+
+---
+
+## 🚀 Quick Start
+
+### Zero Dependencies (Recommended)
+```bash
+# Just open HTML files in Chrome/Edge
+cd tools && start index.html
+```
+
+### Legacy Backend (Optional)
+```bash
+# Only if you need the old Python backend
+pip install -r requirements.txt
+python backend/launcher.py
+```
+
+---
+
+## Full Stack Setup (Production)
+
+### Prerequisites
+- Python 3.11+
+- Neo4j database (local or remote)
+- Redis server (optional, but recommended)
+- llama.cpp server (will be started by our scripts)
+
+### Clean Architecture - 3 Main Scripts
+This project now uses a simplified 3-script architecture:
+
+1. **`python start_llm_server.py`** - Interactive LLM server with model selection (64k window)
+2. **`python start_ece.py`** - ECE Core with integrated MCP memory system
+3. **`python start_embedding_server.py`** - Auto-selects gemma-300m embedding server
+
+### Three-Terminal Startup
+
+**Terminal 1 - LLM Server:**
+```bash
+python start_llm_server.py  # Interactive model selection, 64k window
+```
+
+**Terminal 2 - ECE_Core (The Brain):**
+```bash
+python start_ece.py  # Includes MCP endpoints at port 8000
+```
+
+**Terminal 3 - Embedding Server (optional):**
+```bash
+python start_embedding_server.py  # Auto-selects gemma-300m
+```
+
+### Quick Reka Configuration
+For Reka Flash 3 21B optimized settings:
+```bash
+start-reka.bat  # Starts all services with RTX 4090 optimized parameters
+```
+
+### Alternative: All-in-one Safe Startup
+
+To start all services with conservative defaults using the new Python architecture:
+```bash
+python start_all_safe.py  # Python version (recommended)
+# OR
+start_all_safe_simple.bat  # Batch wrapper
+```
+
+### Health Checks
+```bash
+# Verify LLM
+curl http://localhost:8080/v1/models
+
+# Verify ECE_Core
+curl http://localhost:8000/health
+```
+
+### Troubleshooting: Proxy & Missing Dependencies
+
+If your `start-openai-stream-proxy.*` script returns an error such as:
+
+```
+ModuleNotFoundError: No module named 'sse_starlette'
+```
+
+then your Python environment is missing the `sse-starlette` package. The proxy requires `sse-starlette` for SSE support and `uvicorn` to run.
+
+Quick fix (Windows PowerShell):
+```pwsh
+cd C:\Users\rsbiiw\Projects\Context-Engine\ece-core
+.\.venv\Scripts\Activate  # Or whichever venv you use
+pip install -r requirements.txt
+```
+
+Quick fix (Unix/macOS):
+```bash
+cd /path/to/Context-Engine\ece-core
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+After installing dependencies, re-run the proxy script or the `start-all-safe.*` wrapper.
+
+If you see "The filename, directory name, or volume label syntax is incorrect.", ensure you're running the start script from the repo root and that there are no stray quotes or illegal characters in your path. The wrapper assumes `start-openai-stream-proxy.*` will be run from the repo root (so `%~dp0` works as expected).
+
+## All-in-one Safe Startup (recommended for devs)
+
+To start all core services in a single command using conservative defaults that reduce OOMs and contention, use the safe startup scripts.
+
+This wrapper starts (in order):
+- LLaMa safe server (lower ubatch & single parallel-slot)
+- LLaMa embedding server (optional)
+- LLM Server with Reka-optimized settings
+- ECE Core with MCP enabled
+- MCP server (integrated into ECE Core when enabled)
+
+Usage:
+```bash
+# Windows (Python version - recommended)
+python start_all_safe.py
+
+# Windows (Batch wrapper)
+start_all_safe_simple.bat
+
+# Windows (Reka-optimized)
+start-reka.bat
+```
+
+The scripts perform basic health checks and will wait for LLaMa and ECE Core to be reachable before starting dependent components.
+
+## Configuration
+
+### ECE_Core Configuration
+- **Primary config**: `ece-core/.env` (from `.env.example`)
+- **LLM settings**: Context size, GPU layers, model path
+- **Memory settings**: Redis/Neo4j connection strings
+- **Agent settings**: Enable/disable Verifier, Archivist, Distiller
+
+### Anchor Configuration
+- **Primary config**: `anchor/.env` (from `.env.example`)
+- **ECE connection**: `ECE_URL=http://localhost:8000`
+- **Tool settings**: `PLUGINS_ENABLED=true` to enable tools
+
+---
+
+## Documentation
+
+### Core Specs (Single Source of Truth)
+- `specs/spec.md` - Technical architecture
+- `specs/plan.md` - Vision, roadmap, ADRs
+- `specs/tasks.md` - Implementation backlog
+- `specs/TROUBLESHOOTING.md` - Operational debugging
+
+### Component Specs
+- `backend/specs/spec.md` - Backend technical specs
+- `backend/specs/plan.md` - Backend roadmap
+- `backend/specs/tasks.md` - Backend tasks
+- `anchor/specs/spec.md` - Anchor technical specs
+- `anchor/specs/plan.md` - Anchor roadmap
+- `anchor/specs/tasks.md` - Anchor tasks
+
+### Supplementary
+- `CHANGELOG.md` - Complete project history
+- `archive/README.md` - Archived code explanation
+
+---
+
+## Tool Architecture
+
+**Current**: Plugin-based UTCP (Simple Tool Mode) and MCP Integration
+
+Tools are discovered via multiple methods:
+- **Plugin-based UTCP**: `ece-core/plugins/` directory
+  - `web_search` - DuckDuckGo search
+  - `filesystem_read` - File and directory operations
+  - `shell_execute` - Shell command execution (with safety checks)
+  - `mgrep` - Semantic code search
+- **MCP Integration**: Memory tools via `/mcp` endpoints
+  - `add_memory` - Add to Neo4j memory graph
+  - `search_memories` - Search memory graph with relationships
+  - `get_summaries` - Get session summaries
+
+**Note**: MCP (Model Context Protocol) is now integrated into the main ECE server when `mcp.enabled: true` in config.
+
+---
+
+## Cognitive Architecture: Agents
+
+ECE_Core implements an agent-based architecture for memory hygiene and cognitive enhancement:
+
+### Verifier Agent
+- **Role**: Truth-checking via Empirical Distrust
+- **Method**: Provenance-aware scoring (primary sources > summaries)
+- **Goal**: Reduce hallucinations, increase factual accuracy
+
+### Distiller Agent
+- **Role**: Memory summarization and compression + Context Rotation
+- **Method**: LLM-assisted distillation with salience scoring
+- **Goal**: Maintain high-value context, prune noise, enable infinite context
+
+### Archivist Agent
+- **Role**: Knowledge base maintenance and freshness + Context Management
+- **Method**: Scheduled verification, stale node detection, context rotation oversight
+- **Goal**: Keep memory graph current and trustworthy, manage context windows
+
+### Memory Weaver (Maintenance Engine)
+- **Role**: Automated relationship repair
+- **Method**: Embedding-based similarity with audit trail
+- **Goal**: Maintain graph integrity with full traceability
+
+---
+
+## Small Model Considerations
+
+**Tool Usage**:
+- ⚠️ Models < 14B parameters are **unreliable** for structured tool protocols
+- ✅ Use "Simple Tool Mode" (pattern-based execution) for 4B-8B models
+- ✅ Use 14B+ models (DeepSeek-R1, Qwen2.5-14B) for full tool support
+- ✅ MCP Integration works with any model for memory operations
+
+**Recommended Models**:
+- **Gemma-3 4B** - Best for speed (chat only, tools unreliable)
+- **Qwen3-8B** - Best for reasoning (Simple Tool Mode works)
+- **DeepSeek-R1-14B** - Best for tools (full structured protocol support)
+- **Reka Flash 3 21B** - Best for reasoning (use start-reka.bat)
+
+---
+
+## Development
+
+### Install Dependencies
+```bash
+# ECE_Core
+cd ece-core
+pip install -e .
+
+# Anchor
+cd anchor
+pip install -e .
+```
+
+### Run Tests
+```bash
+# ECE_Core tests
+cd ece-core
+python -m pytest tests/
+
+# Anchor tests
+cd anchor
+python -m pytest tests/
+```
+
+### Package Distribution
+```bash
+# ECE_Core wheel
+cd ece-core
+python -m build
+
+# Anchor standalone executable
+cd anchor
+pyinstaller anchor.spec
+```
+
+---
+
+## Project Status
+
+**Current Phase**: Infinite Context Implementation (Phase 5)
+**Version**: Context-Engine 1.0.0, ECE_Core 1.0.0, Anchor 0.1.0-alpha
+**Last Updated**: 2025-12-08
+
+### ✅ Completed
+- Neo4j + Redis architecture (SQLite removed)
+- Plugin-based tool system (UTCP)
+- MCP integration into main ECE server
+- Cognitive agents (Verifier, Archivist, Distiller)
+- Traceability & rollback for automated repairs
+- Security hardening (API auth, audit logs)
+- PyInstaller packaging
+- **NEW: Infinite Context Pipeline** (64k windows, context rotation, Graph-R1 integration)
+
+### 🔄 In Progress
+- Vector adapter + C2C hot-replica for semantic retrieval
+- Compressed summaries + passage recall (EC-T-133)
+- SLM benchmarking and ALScore measurements
+
+### 📅 Planned
+- CLI wrapper for script operations (`ece-cli`)
+- Increase test coverage to 80%+
+- Developer onboarding (`docker-compose.dev.yaml`)
+
+---
+
+## Target Users
+
+### Primary: Developers with Executive Function Challenges
+**Pain Points**: Memory decay, context switching, project knowledge retention
+**Solution**: Persistent external memory with automatic retrieval
+
+### Secondary: Privacy-Conscious Developers
+**Pain Points**: Cloud dependency, data sovereignty, vendor lock-in
+**Solution**: 100% local, zero telemetry, your data stays yours
+
+### Tertiary: AI Power Users
+**Pain Points**: Need long-term memory, tool integration, customization
+**Solution**: Memory-enhanced workflows, extensible architecture, open source
+
+---
+
+## Research Foundation
+
+- **Graph-R1**: Memory retrieval patterns (https://arxiv.org/abs/2507.21892)
+- **Markovian Reasoning**: Chunked thinking (https://arxiv.org/abs/2506.21734)
+- **Hierarchical Reasoning Model (HRM)**: Multi-level context processing
+- **Empirical Distrust**: Primary source supremacy for verification
+
+See `ece-core/specs/references.md` for complete bibliography.
+
+---
+
+## License
+
+MIT - Use, modify, and distribute freely.
+
+---
+
+## Acknowledgments
+
+Built for neurodivergent hackers who need their tools to work reliably.
+
+**"Your mind, augmented. Your data, sovereign. Your tools, open."**
+
+---
+
+## Need Help?
+
+- **Operational Issues**: See `specs/TROUBLESHOOTING.md`
+- **Architecture Questions**: See `specs/spec.md`
+- **Implementation Tasks**: See `specs/tasks.md`
+- **Project History**: See `CHANGELOG.md`
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\README.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\CHANGELOG.md (Section: ROOT_PROJECT) ---
+
+# Context-Engine Changelog
+
+## [Unreleased]
+
+### Added
+- **CozoDB Corruption Recovery**: Enhanced error handling for IndexedDB corruption with automatic fallback to in-memory database, manual recovery button, and timeout protection against hanging WASM calls.
+- **Bulk CozoDB Import Tool**: Added `tools/prepare_cozo_import.py` to transform `combined_memory.json` into the canonical `relations` payload (`cozo_import_memory.json`) for atomic bulk imports into CozoDB.
+- **Import Safety & Verification**: Added recommended import procedure and a post-import verification + backup step to avoid Schema Detachment.
+
+### Changed
+- **Ingestion Defaults**: Recommended batch size increased to 100 to prevent long-running slow writes that can desync CozoDB's in-memory metadata.
+
+---
+
+## [1.2.2] - 2025-12-18 "Hermes & CozoDB Fixes"
+
+### Fixed
+- **Hermes Model Support**: Fixed 404 errors for OpenHermes and NeuralHermes by mapping them to the verified `Mistral-v0.3` WASM library.
+- **CozoDB Date Formatting**: Removed `strftime` dependency from WASM queries (causing `no_implementation` errors) and moved date formatting to client-side JavaScript.
+- **Drag-and-Drop Import**: Fixed handling of CozoDB `relations` export format in drag-and-drop ingestion.
+- **Documentation**: Established `specs/mlc-urls.md` as a registry for verified WASM binaries.
+
+---
+
+## [1.2.1] - 2025-12-15 "DeepSeek & CozoDB Stabilization"
+
+### Fixed
+- **CozoDB Initialization**: Resolved `CozoDb.new_from_path is not a function` error by switching to `CozoDb.new_from_indexed_db` for persistent browser storage (IndexedDB backend).
+- **WASM Memory Access**: Fixed "memory access out of bounds" error in `sovereign-db-builder.html` and `unified-coda.html` by correctly stringifying JSON parameters passed to `db.run()`.
+- **DeepSeek Configuration**: Fixed "Cannot find model record" error in `unified-coda.html` by decoupling the internal model ID from the HuggingFace URL.
+
+### Added
+- **Sovereign Hub**: Created `tools/index.html` as a central dashboard for the Console, Builder, and Log Viewer.
+- **Log Viewer Upgrade**: Refactored `tools/log-viewer.html` to use `BroadcastChannel` for real-time, polling-free log updates from the console.
+- **Expanded File Support**: Updated `sovereign-db-builder.html` to support ingestion of a wider range of code and config files (ts, rs, go, sql, ini, xml, etc.).
+
+## [1.2.0] - 2025-12-15 "Sovereign Architecture"
+
+### Added
+- **Sovereign Console**: Created `tools/unified-coda.html`, a standalone WASM-based chat console with local CozoDB (OPFS) and Transformers.js.
+- **Sovereign DB Builder**: Created `tools/sovereign-db-builder.html` for ingesting JSON logs into the browser-based database.
+- **Model Support**: Expanded `unified-coda.html` to support the full range of MLC-compatible models (Llama 3.2, Qwen 2.5, Gemma 2, etc.).
+
+### Changed
+- **Log Management**: Updated backend logging to truncate files at 500KB to prevent disk bloat.
+
+## [1.1.0] - 2025-12-14 "Browser Stability & Bridge Fixes"
+
+### Fixed
+- **WebGPU Bridge**: Patched `tools/webgpu_bridge.py` to accept any model name, resolving 503 errors during embedding requests.
+- **LLM Client**: Updated `backend/src/llm.py` to correctly identify and use the configured embedding model (`nomic-embed-text-v1.5`).
+- **Coda Chat**: Modified `backend/src/recipes/coda_chat.py` to sanitize and truncate `retrieve_memory` outputs. Large JSON payloads were causing `Maximum call stack size exceeded` errors in the browser-based LLM worker.
+
+## [1.0.0] - 2025-12-08 "Infinite Context Pipeline"
+
+### Added
+- **Phase 1: Hardware Foundation**: All LLM servers now boot with 65,536 context window and Flash Attention enabled
+- **Phase 2: Context Rotation Protocol**: ContextManager automatically rotates context when exceeding 55k tokens
+- **Phase 3: Graph-R1 Enhancement**: GraphReasoner now retrieves ContextGist memories for historical continuity
+- **ContextGist Nodes**: Neo4j storage for compressed historical context summaries with chronological links
+- **Context Shifting Logic**: Intelligent distillation of old content using Distiller agent with gist creation
+- **Documentation Structure**: Organized specs/ directories at root, backend, and anchor levels with spec.md, plan.md, tasks.md
+- **Infinite Context Pipeline**: Complete end-to-end implementation enabling unlimited context window management
+
+### Changed
+- **Upgraded Context Windows**: All start scripts now default to 64k context for infinite work capability
+- **Enhanced Memory Architecture**: Neo4j now stores both active memories and ContextGist historical summaries
+- **Improved ContextManager**: Added check_and_rotate_context() logic with automatic gist creation and storage
+- **Extended GraphReasoner**: Updated retrieval queries to include ContextGist nodes alongside regular memories
+- **Optimized Distiller Integration**: Enhanced _chunk_and_distill functionality for context rotation use cases
+- **Refined Archivist Agent**: Now coordinates context rotation and gist management operations
+
+### Fixed
+- **Context Limit Elimination**: Fixed issue where systems would crash when reaching context limits
+- **Memory Continuity**: Resolved problems with historical context access across conversation boundaries
+- **Performance Optimization**: Fixed inefficiencies in large context handling with 64k window support
+- **Rotation Logic**: Fixed issues with context preservation during rotation cycles
+
+---
+
+## [0.9.0] - 2025-12-07 "Reka & Local Proxy"
+
+### Added
+- **Reka Configuration**: Full support for Reka-Flash-3-21B (Q4_K_S) with 16k context, stop tokens, and optimized LLaMa server flags.
+- **Local API Proxy**: Added `scripts/local_api_proxy.py` to enforce static API keys for local LLaMa instances (fixes Cline extension "OpenAI API Key" requirement).
+- **VS Code Integration**: Added `.vscode/settings.json` template and `VSCODE_CLINE_SETUP.md` for seamless local development.
+- **MCP Health**: Added `/health` endpoint to Unified Launcher for better compatibility.
+
+### Fixed
+- **MCP Routing**: Resolved duplicate `/mcp` prefix in Unified Launcher routes (`/mcp/tools` is now accessible).
+- **LLM Client**: Added `stop` token support to API payloads and local GGUF generation.
+
+## [0.8.0] - 2025-12-06 "Archivist Protocol"
+
+### Added
+- **Archivist Ingestion**: Implemented `POST /archivist/ingest` endpoint to accept live data from the browser.
+- **Memory Schema**: Enforced **Directive INJ-A1** (`PlaintextMemory`) for immutable "Page-Store" records.
+- **Modular DOM Adapters**:
+    - `GeminiAdapter`: Clean extraction for Google Gemini.
+    - `ChatGPTAdapter`: Clean extraction for ChatGPT.
+    - `ClaudeAdapter`: Clean extraction for Claude.ai.
+    - `GenericAdapter`: Universal fallback for any webpage.
+- **Extension UI**: Added **[Save to Memory]** button to the Side Panel for manual ingestion.
+
+### Fixed
+- **Encoding Crash**: Resolved Windows `charmap` error by enforcing `PYTHONIOENCODING='utf-8'`.
+- **Server Stability**: Fixed startup crashes caused by `MemoryWeaver` resource contention.
+
+## [0.7.0] - 2025-12-06 "Operation Concrete"
+
+### Added
+- **Browser Bridge**: A Chrome Extension (MV3) capable of:
+    - **Voice**: Streaming chat interface via Side Panel.
+    - **Sight**: Context injection (reading active tab).
+    - **Hands**: JavaScript execution on active pages (User-ratified).
+- **Backend Architecture**: Migrated from monolithic scripts to **Modular Recipes** (MAX Agentic Cookbook standard).
+    - `CodaChatRecipe`: Handles orchestration, context, and tool execution.
+- **Persistence**: Side panel now saves chat history to local storage.
+- **Markdown Support**: Chat interface renders code blocks and syntax highlighting.
+
+### Changed
+- **Identity**: System formally renamed from "Sybil" to **"Coda"**.
+- **Documentation**: Adopted `specs/` based documentation policy.
+
+### Fixed
+- **Audit Logger**: Patched critical `NameError` in streaming endpoints.
+- **Security**: Hardened extension execution via `world: "MAIN"` to bypass strict CSP on some sites.
+
+---
+
+## [0.6.0] - 2025-11-30 "Operation MCP Integrated"
+
+### Added
+- **MCP Integration**: Complete integration of MCP server into main ECE Core server
+- **Unified Endpoint**: All MCP functionality now available at `/mcp` on main server (port 8000)
+- **Memory Tools**: Enhanced MCP tools for memory operations:
+    - `add_memory` - Add to Neo4j memory graph
+    - `search_memories` - Search memory graph with relationships
+    - `get_summaries` - Get session summaries
+- **Configuration**: New `mcp_enabled` setting in config.yaml to toggle integration
+- **Authentication**: MCP endpoints now inherit main server authentication settings
+
+### Changed
+- **Architecture**: MCP server no longer runs as separate process, now integrated into main ECE server
+- **Endpoints**: MCP tools now accessed via `/mcp/tools` and `/mcp/call` instead of separate server
+- **Deployment**: Simplified deployment - no need to start separate MCP service
+- **Resources**: Reduced memory footprint by eliminating duplicate server processes
+
+### Fixed
+- **Connection Issues**: Resolved intermittent connection failures between ECE and external MCP server
+- **Latency**: Reduced tool call latency by eliminating inter-service communication overhead
+- **Synchronization**: Fixed race conditions in concurrent tool executions
+
+---
+
+## [0.5.1] - 2025-11-29 "Memory Weaver Security Audit"
+
+### Added
+- **Security Hardening**: Added input validation for all GraphReasoner queries
+- **Audit Trail**: Enhanced logging for all automated relationship repairs
+- **Circuit Breakers**: Added fail safes for Weaver operations
+
+### Changed
+- **Weaver Engine**: Refactored to use parameterized queries, preventing Cypher injection
+- **Permission Model**: Strengthened access controls for relationship modification operations
+
+### Fixed
+- **Cypher Injection**: Patched vulnerability in Neo4j relationship queries
+- **Race Conditions**: Fixed concurrency issues in automated repair operations
+- **Resource Exhaustion**: Added limits to prevent DoS via excessive repair requests
+
+---
+
+## [0.5.0] - 2025-11-28 "Memory Weaver (Automated Repair)"
+
+### Added
+- **Memory Weaver Engine**: Automated system for detecting and repairing broken relationships in Neo4j
+- **Similarity Detection**: Embedding-based relationship discovery for linking related memories
+- **Audit System**: Complete traceability for all automated repairs with `auto_commit_run_id`
+- **Rollback Capability**: Deterministic reversal of automated changes via `rollback_commits_by_run.py`
+- **Scheduler**: Background maintenance tasks for continuous graph integrity
+
+### Changed
+- **Graph Maintenance**: Automated relationship repair now runs as background process
+- **Quality Assurance**: Enhanced relationship validation with similarity scoring
+- **Traceability**: All automated changes now logged with unique run identifiers
+
+### Fixed
+- **Orphaned Nodes**: Automatically discovers and connects isolated memories
+- **Broken Links**: Repairs missing relationships between related concepts
+- **Data Drift**: Corrects inconsistent metadata across related nodes
+
+---
+
+## [0.4.0] - 2025-11-25 "Graph-R1 Implementation"
+
+### Added
+- **Graph Reasoner**: Iterative "Think → Query → Retrieve → Rethink" reasoning engine
+- **Q-Learning Retrieval**: Reinforcement learning for optimized memory access patterns
+- **Markovian Reasoning**: Chunked thinking with state preservation across context shifts
+- **Multi-Hop Queries**: Complex graph traversal for answering compound questions
+- **Cognitive Agents**: Plugin architecture for specialized reasoning tasks
+
+### Changed
+- **Retrieval Method**: Replaced simple vector search with Graph-R1 retrieval
+- **Memory Access**: Graph-based traversal now primary method for context assembly
+- **Agent Architecture**: Modular cognitive agents for specialized tasks
+- **Context Building**: Enhanced context with relationship-aware retrieval
+
+### Fixed
+- **Context Relevance**: Improved precision of memory retrieval
+- **Chain of Thought**: Better preservation of reasoning pathways
+- **Memory Decay**: Reduced loss of historical context in long conversations
+
+---
+
+## [0.3.1] - 2025-11-20 "Security Hardening"
+
+### Added
+- **API Authentication**: Token-based authentication for all endpoints
+- **Rate Limiting**: Request throttling to prevent abuse
+- **Input Sanitization**: Enhanced validation for all user inputs
+- **Audit Logging**: Comprehensive logging of all sensitive operations
+- **Secure Defaults**: Safe configuration presets for common deployment scenarios
+
+### Changed
+- **Security Model**: Implemented zero-trust architecture
+- **Credential Handling**: Secure storage and transmission of API keys
+- **Access Controls**: Granular permissions for different API endpoints
+
+### Fixed
+- **Authentication Bypass**: Patched critical vulnerability in API access
+- **Data Exposure**: Resolved information disclosure in error messages
+- **Injection Attacks**: Fixed potential SQL injection in Neo4j queries
+
+---
+
+## [0.3.0] - 2025-11-15 "Neo4j Migration Complete"
+
+### Added
+- **Neo4j Integration**: Complete migration from SQLite to Neo4j graph database
+- **Redis Cache**: Hot cache layer for active session management
+- **Graph Schema**: Formal schema definition for memory relationships
+- **Migration Tools**: Scripts to migrate existing SQLite data to Neo4j
+- **Backup System**: Automated graph backup and restoration procedures
+
+### Changed
+- **Storage Architecture**: Tiered storage (Redis hot cache + Neo4j persistent)
+- **Query Language**: Cypher queries for graph operations
+- **Relationship Modeling**: Graph-based connections between memories
+- **Indexing Strategy**: Graph-based indices for faster retrieval
+
+### Fixed
+- **Performance**: Significantly improved query performance for complex relationships
+- **Scalability**: Better handling of large-scale memory graphs
+- **Consistency**: Stronger data integrity with ACID-compliant transactions
+
+---
+
+## [0.2.0] - 2025-10-30 "Cognitive Agents"
+
+### Added
+- **Verifier Agent**: Fact-checking via empirical distrust protocol
+- **Archivist Agent**: Memory maintenance and staleness detection
+- **Distiller Agent**: Content summarization and extraction
+- **Agent Framework**: Plugin system for extensible cognitive capabilities
+- **Truth Scoring**: Provenance-aware fact-checking with primary source priority
+
+### Changed
+- **Memory Hygiene**: Automated maintenance of memory quality
+- **Verification Process**: Evidence-based fact-checking system
+- **Quality Assurance**: Continuous assessment of memory reliability
+- **Maintenance Schedule**: Regular memory grooming operations
+
+### Fixed
+- **Hallucinations**: Reduced false information in responses
+- **Stale Information**: Automatic detection and updating of outdated memories
+- **Data Quality**: Improved content validation and cleaning procedures
+
+---
+
+## [0.1.0] - 2025-09-15 "Initial Architecture"
+
+### Added
+- **Core Backend**: Initial ECE_Core with SQLite memory system
+- **Anchor Interface**: Terminal interface for user interaction
+- **Basic Memory**: Text-based memory storage and retrieval
+- **LLM Integration**: Support for various local LLM servers
+- **Plugin System**: Extensible tool architecture (UTCP)
+
+### Changed
+- **Foundation**: Established core architecture patterns
+- **API Design**: Defined RESTful API structure for components
+
+### Fixed
+- **Basic Functionality**: Initial implementation of core features
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\CHANGELOG.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\architecture-overview.md (Section: ROOT_SPECS) ---
+
+# Architecture Overview: Sovereign Coda (Browser-Native)
+
+**Status:** Production (V2)
+**Philosophy:** 100% Local, 100% Browser, 0% Backend.
+
+## Core Stack
+
+The system has migrated from a Python/Neo4j backend to a pure [WASM (WebAssembly)](https://webassembly.org/) stack running directly in the user's browser (Chrome/Edge).
+
+### 1. Compute Layer (WebLLM)
+- **Engine:** [WebLLM](https://webllm.mlc.ai/) (MLC-AI)
+- **Runtime:** WebGPU (Hardware accelerated)
+- **Models:** Quantized (q4f16_1) Llama 3, Qwen 2.5, DeepSeek R1, Gemma 2.
+- **Function:** Real-time reasoning, chat inference, logic execution.
+
+### 2. Memory Layer (CozoDB WASM)
+- **Database:** [CozoDB](https://cozodb.org/) (Datalog/Relational/Graph)
+- **Storage:** IndexedDB / OPFS (Origin Private File System)
+- **Structure:**
+  - `*memory`: Stored relations (content, timestamp, embedding).
+  - `*vectors`: HNSW vector index for semantic search.
+- **Query Language:** Datalog (logic-based query).
+
+### 3. Application Layer (HTML5)
+- **Format:** Zero-dependency HTML files (no Node.js/Bundler required).
+- **Files:**
+  - `model-server-chat.html`: The **Brain**. Loads LLM, connects to DB, runs the Reasoning Loop.
+  - `sovereign-db-builder.html`: The **Stomach**. Ingests raw files (Markdown/JSON) and creates vector embeddings.
+  - `log-viewer.html`: The **Nerves**. Real-time system diagnostics.
+
+## Data Flow
+
+```mermaid
+graph TD
+    User[User] -->|Chat| UI[model-server-chat.html]
+    UI -->|Inference| WebLLM[WebLLM ServiceWorker]
+    UI -->|Query| Cozo[CozoDB WASM]
+    
+    subgraph Browser Storage
+        Cozo -->|Persist| IDB[IndexedDB]
+        Cozo -->|Vector| Embed[Transformers.js]
+    end
+    
+    File[Data Files] -->|Drag & Drop| Builder[sovereign-db-builder.html]
+    Builder -->|Insert| IDB
+```
+
+## Critical Workflows
+
+### 1. The Reasoning Loop (Graph-R1)
+1. User asks a question.
+2. LLM generates a **Datalog Query** (Thinking Process).
+3. CozoDB executes the query against local memory.
+4. Results are fed back to LLM as Context.
+5. LLM synthesizes final answer.
+
+### 2. Context Injection
+- **Sovereign-First:** User manually feeds context via the Memory Builder.
+- **Privacy:** No data leaves the browser. No API keys sent to cloud.
+
+## Reference Specs
+- [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md)
+- [Extension Bridge Spec](architecture/extension-bridge.spec.md)
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\architecture-overview.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\doc_policy.md (Section: ROOT_SPECS) ---
+
+# Documentation Policy (Context-Engine)
+
+**Master Policy for all directories. Code is authoritative; documentation supports it.**
+
+---
+
+## Rule 1: Minimize Documentation
+
+- Code is the source of truth. Documentation explains *why* and guides *how*, but never replaces code.
+- Default assumption: No docs needed unless setup is genuinely ambiguous or painful.
+- LLM-generated reference docs are archived to `/archive/` after they're used.
+
+---
+
+## Rule 2: Allowed Documentation Per Directory
+
+### Root Level
+- **README.md** — 100 words. Answer: "What is this repo?"
+- **CHANGELOG.md** — Version history and major changes
+- **STARTUP.md** — Quick start (if needed)
+- **specs/** — Central spec layer (see Rule 3)
+
+### `backend/`, `tools/`, `extension/`, `scripts/`
+- **README.md** — Single sentence. Answer: "What does this directory do?"
+- **CONFIGURATION.md** — Only if env setup is non-obvious (backend only)
+- **No additional .md files** in directory root (see Rule 3)
+
+### `backend/src/`, `tools/src/`, `extension/src/`
+- No separate documentation. Inline code comments with `#file:specs/...` references.
+
+---
+
+## Rule 3: Specification Layer (`specs/`)
+
+The `specs/` directory is the **single source of architectural truth**.
+
+### Core Files
+- **spec.md** — High-level system architecture (read this first)
+- **plan.md** — Roadmap and phases
+- **tasks.md** — Implementation task queue
+- **doc_policy.md** — This file (documentation governance)
+- **mlc-urls.md** — Registry of verified MLC-LLM model URLs (see Rule 3.1)
+
+### Architecture Subdirectory
+- **specs/architecture/** — Deep technical specifications
+  - **sovereign-wasm.spec.md** — Browser-native layer (WebGPU, CozoDB, model-server-chat, builder)
+  - **memory-layer.spec.md** — Neo4j/Redis architecture and schemas
+  - **extension-bridge.spec.md** — Chrome extension design (injection, pause triggers)
+  - **agents.spec.md** — Agent system (Verifier, Distiller, Archivist)
+  - **api.spec.md** — FastAPI endpoints and protocols
+
+### Where Each Spec Goes
+- **Architectural overview or design decisions?** → `specs/spec.md`
+- **Multi-phase roadmap?** → `specs/plan.md`
+- **Implementation tasks?** → `specs/tasks.md`
+- **Deep technical details** (schemas, data flow, algorithms)? → `specs/architecture/<domain>.spec.md`
+- **Local directory context** (e.g., "what does scripts/ do")? → `README.md` in that directory
+
+---
+
+## Rule 4: Deprecated/Generated Documentation
+
+All LLM-generated reference documentation (tutorials, examples, detailed walkthroughs) should be:
+1. **Used locally** (for context during development)
+2. **Archived to `/archive/`** after they served their purpose
+3. **Never** left in active project root or major directories
+
+Examples of archived docs:
+- `archive/docs_removed/` — Outdated technical docs
+- `archive/anchor/` — Deprecated CLI interface docs
+- `archive/setup_docs/` — Legacy setup guides
+
+---
+
+## Rule 5: Cross-Referencing Specs
+
+Within any spec file, use markdown links to other specs:
+
+```markdown
+For memory architecture, see [Memory Layer Spec](architecture/memory-layer.spec.md).
+For browser integration, see [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md).
+```
+
+In code files, use comments to reference specs:
+```python
+# Graph-R1 reasoning flow (see specs/architecture/agents.spec.md)
+def graph_r1_query():
+    pass
+```
+
+---
+
+## Rule 6: Truth Precedence
+
+If **code conflicts with documentation**:
+1. Code is correct
+2. Update the relevant spec file immediately
+3. Add a git note explaining the discrepancy
+
+If **multiple specs conflict**:
+1. `spec.md` is authoritative for architecture
+2. `architecture/*.spec.md` fills in implementation details
+3. Code is the final arbiter
+
+---
+
+## Rule 7: Reality Constraint
+
+Documentation must never:
+- Contradict the "Empirical Distrust" protocol (retrieve > internal knowledge)
+- Promise features not implemented in code
+- Reference deprecated repositories or APIs without clear deprecation notices
+
+---
+
+## Enforcement
+
+- **Review checklist:** Before merging PRs, verify no new .md files are scattered (should only be in specs/ or as single README.md per directory)
+- **Quarterly cleanup:** Archive generated/reference docs older than 3 months
+- **Broken links:** Use `specs/architecture/` links; verify they exist before committing
+
+---
+
+## Quick Reference
+
+| Question | Answer |
+|----------|--------|
+| Where's the architecture? | `specs/spec.md` |
+| Where's the roadmap? | `specs/plan.md` |
+| Where are the tasks? | `specs/tasks.md` |
+| How do I set up the backend? | `backend/CONFIGURATION.md` |
+| What's in tools/? | `tools/README.md` |
+| How do I understand WASM layer? | `specs/architecture/sovereign-wasm.spec.md` |
+| How do Neo4j/Redis work? | `specs/architecture/memory-layer.spec.md` |
+| How does the extension work? | `specs/architecture/extension-bridge.spec.md` |
+| Where are old docs? | `archive/docs_removed/` |
+
+---
+
+## CozoDB Import Format & Recovery
+
+**Purpose:** Describe the canonical JSON format used for bulk imports into the browser CozoDB instance and recovery steps when a Schema Detachment occurs.
+
+**Note:** As of HTML pivot, CozoDB runs entirely in browser WASM with IndexedDB persistence. Recovery procedures apply to browser-native tools in `tools/` directory.
+
+### Canonical Import JSON
+CozoDB expects a top-level JSON object with a `relations` array. Each relation should look like this:
+
+```json
+{
+  "relations": [
+    {
+      "name": "memory",
+      "headers": ["id","timestamp","role","content","source","embedding"],
+      "rows": [
+        ["id-1", 1688790000000, "system", "file text...", "path/to/file.md", null],
+        [...]
+      ]
+    }
+  ]
+}
+```
+
+- `id`: string, unique identifier (UUID or deterministic hash)
+- `timestamp`: integer, Unix ms
+- `role`: string, e.g., `system` or `user`
+- `content`: string, textual content (truncate if exceedingly large)
+- `source`: string, origin path or descriptor
+- `embedding`: either an array of floats (embedding vector) or `null` if embeddings will be computed later
+
+### Recovery: Schema Detachment
+When `export_relations({})` returns `{"message":"missing field `relations` ..."}` or queries report `query::relation_not_found`:
+1. Attempt non-destructive reattach:
+```js
+await window.db.run(":create memory { id: String => timestamp: Int, role: String, content: String, source: String, embedding: <F32; 384> } IF NOT EXISTS");
+```
+2. If reattach fails, export raw OPFS/IndexedDB blobs and decode them locally using `tools/decode_cozo_blob.py`.
+3. Prefer bulk import from canonical source (`cozo_import_memory.json`) rather than reimporting individual rows.
+
+### Tooling & Best Practices
+- Use `tools/prepare_cozo_import.py` to create `cozo_import_memory.json` from `combined_memory.json`.
+- For a guaranteed atomic result: nuke the DB and `Force Import Relations from JSON` (or use `db.import_relations(payload)` in Console) with the produced file.
+- After import, run `export_relations({})` and persist the result (backup) plus verify by running `?[count] := *memory{id}`.
+
+---
+
+**Last Updated:** 2025-12-15  
+**Version:** 1.0  
+**Policy Owner:** Architecture Council
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\doc_policy.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\mlc-urls.md (Section: ROOT_SPECS) ---
+
+# Verified MLC Model Registry
+
+**Status:** Living Document
+**Purpose:** Centralize trusted, verified URLs for MLC-LLM models and WASM libraries to prevent cache errors and guessing games.
+
+## Protocol for Adding
+1. **Verify** the URL returns 200 OK (use `curl -I`).
+2. **Test** the model loads in `model-server-chat.html` (or equivalent).
+3. **Commit** the entry here.
+
+---
+
+## Verified Models
+
+### Hermes Family (Users Favorites)
+
+| Model Name | HuggingFace ID | WASM Library URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Hermes-3-Llama-3.2-3B** | `mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Llama-3.2-3B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+| **OpenHermes-2.5** | `mlc-ai/OpenHermes-2.5-Mistral-7B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Mistral-7B-Instruct-v0.3-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** (via v0.3 engine) |
+| **NeuralHermes-2.5** | `mlc-ai/NeuralHermes-2.5-Mistral-7B-q3f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Mistral-7B-Instruct-v0.3-q3f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** (via v0.3 engine) |
+| **Hermes-2-Pro-Mistral** | `mlc-ai/Hermes-2-Pro-Mistral-7B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Mistral-7B-Instruct-v0.3-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** (via v0.3 engine) |
+
+### Standard MLC Models
+
+| Model Name | HuggingFace ID | WASM Library URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Llama-3.2-3B-Instruct** | `mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Llama-3.2-3B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+| **DeepSeek-R1-Distill-Qwen** | `mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\mlc-urls.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\tasks.md (Section: ROOT_SPECS) ---
+
+# Context-Engine Implementation Tasks
+
+## Current Work Queue (Phase 8: Browser-Native)
+
+### Completed - HTML Pivot ✅
+- [x] Browser-native sovereign tools (tools/)
+  - [x] WebLLM integration for local inference
+  - [x] CozoDB WASM for persistent memory
+  - [x] Transformers.js for embeddings
+  - [x] Zero-dependency HTML architecture
+  - [x] Hermes/Mistral Model Verification (v0.3 WASM)
+
+### Active Development - Context Injection Debugging
+- [ ] Fix context injection in model-server-chat.html
+  - [ ] Debug Graph-R1 reasoning loop coordination
+  - [ ] Resolve memory retrieval integration
+  - [ ] Test reasoning trace display
+
+### Deferred - Backend Optimization (Post-Pivot)
+- [ ] Vector Adapter & C2C Replication (backend archived)
+- [ ] Implement VectorAdapter interface for semantic search (EC-V-101)
+  - [ ] Define abstract base class with required methods
+  - [ ] Implement Redis VectorAdapter with HNSW indexing
+  - [ ] Implement FAISS VectorAdapter for local deployment
+  - [ ] Performance benchmarking against graph-only retrieval
+  - [ ] Integration testing with ContextManager
+
+- [ ] C2C (Context-to-Context) Hot-Replica System (EC-C2C-102)  
+  - [ ] Define hot-replica synchronization protocol
+  - [ ] Implement real-time vector index updates
+  - [ ] Cross-validation between graph and vector retrieval
+  - [ ] Automatic failover from vector to graph when needed
+
+### Active Development - Compressed Summaries
+- [ ] Compressed Summary Architecture (EC-CS-133)
+  - [ ] Implement summary generation pipeline with salience scoring
+  - [ ] Design passage recall mechanism from compressed representations
+  - [ ] Optimize compression ratios vs. information retention
+  - [ ] Integration with ContextGist rotation system
+
+### Active Development - SLM Benchmarking
+- [ ] SLM (Small Language Model) Benchmark Suite (EC-BM-155)
+  - [ ] Implement ALScore (Augmentation Latency Score) measurement
+  - [ ] Standardized benchmarks for memory-augmented tasks
+  - [ ] Performance comparison across model architectures (Gemma, Qwen, Llama)
+  - [ ] Optimization recommendations for different hardware configurations
+
+## Upcoming Priorities (Phase 8: Expansion)
+
+### Tooling Integration Framework
+- [ ] OS-Level Tool Integration (EC-TI-201) 
+  - Define standardized interfaces for filesystem, clipboard, window management
+  - Security hardening for native tool execution
+  - Performance optimization for frequent small operations
+
+### Multimodal Capabilities  
+- [ ] Vision Input System (EC-VIS-202)
+  - Image embedding and storage in Neo4j
+  - Visual context injection for conversations
+  - OCR integration for document processing
+
+- [ ] Audio Processing Module (EC-AUD-203)
+  - Speech-to-text for voice input
+  - Audio embedding for multimodal memory
+  - Text-to-speech for voice output
+
+### Federation Protocol
+- [ ] Distributed Context Engine Network (EC-FED-204)
+  - Secure peer-to-peer communication protocol
+  - Cross-instance memory sharing with privacy controls
+  - Conflict resolution for concurrent modifications
+
+## Backlog (Future Considerations)
+
+### Mobile Deployment
+- [ ] Android Application (EC-MOB-301)
+- [ ] iOS Application (EC-MOB-302) 
+- [ ] Cross-platform UI framework evaluation (React Native vs. Flutter)
+
+### Advanced Reasoning
+- [ ] Multi-Agent Collaboration (EC-MA-303)
+- [ ] Debate Protocols (EC-DEB-304)
+- [ ] Metacognitive Awareness (EC-MET-305)
+
+### Privacy & Security
+- [ ] Homomorphic Encryption for Sensitive Data (EC-PRIV-306)
+- [ ] Zero-Knowledge Proofs for Verification (EC-ZKP-307)
+- [ ] Differential Privacy for Statistical Queries (EC-DP-308)
+
+## Completed Recently (Phase 5: Infinite Context Pipeline)
+
+### ✅ Hardware Foundation (EC-HW-101)
+- [x] Upgrade LLM servers to 64k context window (Dec 2025)
+- [x] Flash Attention optimization for long contexts (Dec 2025)
+- [x] KV cache optimization with Q8 quantization (Dec 2025)
+
+### ✅ Context Rotation Protocol (EC-CRP-102)
+- [x] ContextManager monitoring of 55k token threshold (Dec 2025)
+- [x] Distiller integration for content compression (Dec 2025)
+- [x] Neo4j storage for ContextGist nodes (Dec 2025)
+- [x] Chronological linking of gists with [:NEXT_GIST] (Dec 2025)
+
+### ✅ Graph-R1 Enhancement (EC-GR1-103)
+- [x] GraphReasoner retrieval of ContextGist nodes (Dec 2025)
+- [x] Historical context integration in reasoning loop (Dec 2025)
+- [x] Continuity maintenance across rotations (Dec 2025)
+
+### ✅ System Integration & Testing
+- [x] End-to-end testing of infinite context pipeline (Dec 2025)
+- [x] Performance benchmarking with 30k+ token inputs (Dec 2025)
+- [x] Memory continuity verification across rotation boundaries (Dec 2025)
+
+## Maintenance Tasks
+
+### Ongoing
+- [ ] Security audit of all HTTP endpoints and API calls
+- [ ] Performance monitoring of Neo4j queries and Redis operations
+- [ ] Documentation updates for new features and APIs
+- [ ] Dependency updates and vulnerability scans
+
+### Monthly
+- [ ] Review and clean up old ContextGist nodes to prevent unbounded growth
+- [ ] Verify backup and recovery procedures for Neo4j and Redis
+- [ ] Update HuggingFace model references and fallback URLs
+- [ ] Test with latest llama.cpp builds for new features and optimizations
+
+## Known Issues & Technical Debt
+
+### Performance
+- [ ] Neo4j query optimization for large graph traversal (EC-PERF-001)
+- [ ] Redis memory usage monitoring and cleanup (EC-PERF-002)
+- [ ] Context rotation timing optimization to minimize disruption (EC-PERF-003)
+
+### Reliability
+- [ ] Fallback mechanisms when Neo4j is temporarily unavailable (EC-REL-001)
+- [ ] Retry logic for failed ContextGist creations during high load (EC-REL-002)
+- [ ] Graceful degradation when ContextGist retrieval fails (EC-REL-003)
+
+### Usability
+- [ ] Progress indicators during large context rotation operations (EC-USAB-001)
+- [ ] User notifications about automatic context rotation events (EC-USAB-002)
+- [ ] Configurable rotation thresholds based on model capabilities (EC-USAB-003)
+
+## Research Tasks
+
+### Active Research
+- [ ] Evaluation of different compression algorithms for ContextGist generation (EC-RES-001)
+- [ ] Comparison of rotation strategies (oldest-first vs. least-relevant-first) (EC-RES-002)
+- [ ] Investigation of hybrid retrieval (graph + vector + keyword) effectiveness (EC-RES-003)
+
+### Planned Research
+- [ ] Long-term memory stability testing over 6+ month periods (EC-RES-004)
+- [ ] Cognitive load measurement with infinite vs. finite context systems (EC-RES-005)
+- [ ] User productivity impact assessment with comprehensive usage analytics (EC-RES-006)
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\tasks.md ---
+

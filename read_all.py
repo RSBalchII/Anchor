@@ -13,7 +13,7 @@ Excludes archived folders and generic boilerplate.
 """
 import argparse
 import os
-import chardet
+
 from typing import Iterable, List, Tuple
 
 
@@ -143,11 +143,14 @@ def create_project_corpus(
                     raw_data = raw_file.read()
                 if not raw_data:
                     continue
-                # Use chardet to guess the encoding, but default to utf-8
-                encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
-
-                # Decode using the detected encoding, replacing any errors
-                decoded_content = raw_data.decode(encoding, errors="replace")
+                if not raw_data:
+                    continue
+                
+                # Standard library fallback: Try UTF-8, then fallback to replacing errors
+                try:
+                    decoded_content = raw_data.decode("utf-8")
+                except UnicodeDecodeError:
+                    decoded_content = raw_data.decode("utf-8", errors="replace")
 
                 outfile.write(f"--- START OF FILE: {file_path} (Section: {section}) ---\n\n")
                 outfile.write(decoded_content + "\n\n")
