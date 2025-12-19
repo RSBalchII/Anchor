@@ -16,20 +16,7 @@
   - [ ] Resolve memory retrieval integration
   - [ ] Test reasoning trace display
 
-### Deferred - Backend Optimization (Post-Pivot)
-- [ ] Vector Adapter & C2C Replication (backend archived)
-- [ ] Implement VectorAdapter interface for semantic search (EC-V-101)
-  - [ ] Define abstract base class with required methods
-  - [ ] Implement Redis VectorAdapter with HNSW indexing
-  - [ ] Implement FAISS VectorAdapter for local deployment
-  - [ ] Performance benchmarking against graph-only retrieval
-  - [ ] Integration testing with ContextManager
 
-- [ ] C2C (Context-to-Context) Hot-Replica System (EC-C2C-102)  
-  - [ ] Define hot-replica synchronization protocol
-  - [ ] Implement real-time vector index updates
-  - [ ] Cross-validation between graph and vector retrieval
-  - [ ] Automatic failover from vector to graph when needed
 
 ### Active Development - Compressed Summaries
 - [ ] Compressed Summary Architecture (EC-CS-133)
