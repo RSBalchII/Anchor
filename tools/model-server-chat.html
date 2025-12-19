@@ -1106,7 +1106,24 @@ If context is insufficient, say so clearly.`;
                 });
 
             } catch (e) {
-                ui.append("system", `**Initialization Error**\n\`\`\`\n${e.message}\n${e.stack}\n\`\`\``);
+                // Specific handling for WebGPU on Snapdragon/ARM
+                if (e.message.includes("compatible GPU")) {
+                    ui.log(`❌ WebGPU Error: ${e.message}`, "error");
+                    ui.append("system", `
+<div style="border: 2px solid #d7ba7d; background: #2d2d2d; padding: 10px; border-radius: 5px; margin: 10px 0;">
+    <h4 style="margin:0 0 10px 0; color: #d7ba7d;">⚠️ Snapdragon / WebGPU Issue Detected</h4>
+    <p>Your browser is blocking WebGPU access. This is common on Snapdragon X Elite devices.</p>
+    <p><strong>Fix:</strong></p>
+    <ol style="margin-left: 20px;">
+        <li>Open a new tab and go to: <code style="background:#444; padding:2px;">edge://flags/#enable-unsafe-webgpu</code></li>
+        <li>Set it to <strong>Enabled</strong>.</li>
+        <li><strong>Restart the browser</strong> completely.</li>
+    </ol>
+</div>
+`);
+                } else {
+                    ui.append("system", `**Initialization Error**\n\`\`\`\n${e.message}\n${e.stack}\n\`\`\``);
+                }
             }
         }
 
