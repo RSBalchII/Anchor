@@ -355,6 +355,11 @@
                         <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected
                         </div>
                     </div>
+                    <div
+                        style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="autosave-toggle" checked onchange="toggleAutoSave(this.checked)">
+                        <label for="autosave-toggle" style="font-size: 11px; cursor: pointer;">💾 Auto-Save Memories</label>
+                    </div>
                     <button id="clear-cache-btn"
                         style="width: 100%; padding: 6px; background: #a43131; border:none; margin-top:5px; font-size: 11px;">⚠️
                         Delete Model Cache</button>
@@ -422,8 +427,39 @@
         const { state, subscribe } = createStore({
             status: "Initializing...",
             progress: 0,
-            activeModel: null
+            activeModel: null,
+            autoSave: true
         });
+
+        // --- UTILS: The Archivist ---
+        async function saveTurn(role, content) {
+            if (!state.autoSave || !window.db) return;
+            try {
+                const ts = Date.now();
+                const id = `msg_${ts}_${role}`;
+                // Minimal escape for Datalog string
+                const safeContent = content.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+                // Write to Memory (Embedding null for Dreamer to fix later)
+                const query = `
+                    :put memory {
+                        id: "${id}",
+                        timestamp: ${ts},
+                        role: "${role}",
+                        content: "${safeContent}",
+                        source: "root_console",
+                        embedding: null
+                    }
+                `;
+                await window.db.run(query);
+                ui.log(`💾 Memory Saved (${role})`, "debug");
+            } catch (e) {
+                ui.log(`Save Failed: ${e.message}`, "error");
+            }
+        }
+
+        // Expose toggle handler
+        window.toggleAutoSave = (checked) => { state.autoSave = checked; };
 
         // Bridge legacy UI logging to Sovereign Logger
         const ui = {
@@ -633,6 +669,7 @@
             }
 
             buildVirtualPrompt(systemPrompt, retrievedMemories, chatHistory, userText) {
+                const now = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
                 const physicsInstruction = `
 ### COGNITIVE PROTOCOL:
 1. **TRUST THE CLUES:** You are operating in a "Sovereign" environment. The [CONTEXT CLUES] provided are the Ground Truth.
@@ -640,6 +677,9 @@
 3. **PATH OF LEAST ACTION:** The most efficient answer is the correct one.
 `;
                 return `
+### SYSTEM TIME
+${now}
+
 ### BACKGROUND INFORMATION
 ${retrievedMemories ? retrievedMemories : "No specific context available."} 
 
@@ -714,6 +754,7 @@ ${userText}
             document.getElementById('send-btn').disabled = true;
 
             ui.append("user", text);
+            if (state.autoSave) await saveTurn("user", text);
 
             try {
                 const { context, finalAnswer } = await contextManager.executeR1Loop(text, []);
@@ -736,6 +777,7 @@ ${userText}
                     fullAnswer += delta;
                     msgHandle.update(fullAnswer);
                 }
+                if (state.autoSave) await saveTurn("assistant", fullAnswer);
                 ui.log("✅ Response generated.", "success");
 
             } catch (e) {
@@ -859,13 +901,16 @@ ${userText}
                     const [keys] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
                     if (keys.length > 0) {
                         db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
+                        window.db = db;
                         ui.log("✅ Root Graph Connected (Persistent)", "success");
                     } else {
                         db = CozoDb.new();
+                        window.db = db;
                         ui.log("✅ Root Graph Created (Memory)", "info");
                     }
                 } catch (e) {
                     db = CozoDb.new();
+                    window.db = db;
                     ui.log("⚠️ Fallback to Memory Graph", "warn");
                 }
 
