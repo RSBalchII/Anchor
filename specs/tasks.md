@@ -20,9 +20,14 @@
 - [x] **Ingestion Refinement**: Upgraded `read_all.py` to produce LLM-legible YAML.
 - [x] **Root Architecture Docs**: Finalized terminology (Sovereign -> Root).
 
+## Phase 3.1: Active Cognition (Current)
+- [x] **Memory Writing**: Implement `saveTurn` to persist chat to CozoDB.
+- [x] **User Control**: Add "Auto-Save" toggle to System Controls.
+- [x] **Temporal Grounding**: Inject System Time into `buildVirtualPrompt`.
+- [ ] **Multimodal**: Add Drag-and-Drop Image support to Console.
+
 ### Active Development - Expansion
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.
-- [ ] **Multimodal**: Add image support to Builder (drag-and-drop embedding).
 - [ ] **Voice Output**: Add TTS to Console.
 
 ## Phase 4: The Specialist Array

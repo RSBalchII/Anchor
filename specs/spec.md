@@ -67,7 +67,12 @@ graph TD
    - If missing info: Request specific search (`NEED_CONTEXT: term`).
 4. Final answer streamed to user.
 
-### 2. Root Persistence
+### 2. The Write Loop (Active Cognition)
+- **Concept**: The Brain is no longer read-only.
+- **Action**: Every chat interaction is persisted to CozoDB (`*memory` relation).
+- **Consolidation**: The "Root Dreamer" (Subconscious) picks up these raw memories, vectorizes them, and creates associations in the background.
+
+### 3. Root Persistence
 - **Zero Backend:** Python is only used for serving static files (`http.server`).
 - **Portability:** The entire "Brain" is contained in `browser_data` and IndexedDB.
 

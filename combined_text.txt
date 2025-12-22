@@ -1231,6 +1231,8 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
 
 ## Phase 3: Expansion (Current)
 - [ ] **Agentic Capabilities**: Re-introduce Verifier/Distiller logic in JS.
+- [ ] **Active Memory Persistence**: Enable chat to write back to the Graph.
+- [ ] **Temporal Awareness**: Ground the model in real-time.
 - [ ] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
 - [ ] **Hybrid RAG**: Optimize vector + graph retrieval weighting.
 
@@ -1309,7 +1311,12 @@ graph TD
    - If missing info: Request specific search (`NEED_CONTEXT: term`).
 4. Final answer streamed to user.
 
-### 2. Root Persistence
+### 2. The Write Loop (Active Cognition)
+- **Concept**: The Brain is no longer read-only.
+- **Action**: Every chat interaction is persisted to CozoDB (`*memory` relation).
+- **Consolidation**: The "Root Dreamer" (Subconscious) picks up these raw memories, vectorizes them, and creates associations in the background.
+
+### 3. Root Persistence
 - **Zero Backend:** Python is only used for serving static files (`http.server`).
 - **Portability:** The entire "Brain" is contained in `browser_data` and IndexedDB.
 
@@ -1341,9 +1348,14 @@ graph TD
 - [x] **Ingestion Refinement**: Upgraded `read_all.py` to produce LLM-legible YAML.
 - [x] **Root Architecture Docs**: Finalized terminology (Sovereign -> Root).
 
+## Phase 3.1: Active Cognition (Current)
+- [x] **Memory Writing**: Implement `saveTurn` to persist chat to CozoDB.
+- [x] **User Control**: Add "Auto-Save" toggle to System Controls.
+- [x] **Temporal Grounding**: Inject System Time into `buildVirtualPrompt`.
+- [ ] **Multimodal**: Add Drag-and-Drop Image support to Console.
+
 ### Active Development - Expansion
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.
-- [ ] **Multimodal**: Add image support to Builder (drag-and-drop embedding).
 - [ ] **Voice Output**: Add TTS to Console.
 
 ## Phase 4: The Specialist Array
@@ -2098,7 +2110,7 @@ const encodeString = (typeof cachedTextEncoder.encodeInto === 'function'
 });
 
 function passStringToWasm0(arg, malloc, realloc) {
-
+    if (typeof arg !== 'string') arg = arg ? String(arg) : "";
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -2207,6 +2219,7 @@ export class CozoDb {
     * @returns {Promise<string>}
     */
     run(script, params, immutable) {
+        if (typeof params === 'undefined' || params === null) params = "{}";
         const ptr0 = passStringToWasm0(script, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(params, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -4240,6 +4253,11 @@ export async function clearIndexedDbStore(dbName, storeName) {
                         <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected
                         </div>
                     </div>
+                    <div
+                        style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="autosave-toggle" checked onchange="toggleAutoSave(this.checked)">
+                        <label for="autosave-toggle" style="font-size: 11px; cursor: pointer;">💾 Auto-Save Memories</label>
+                    </div>
                     <button id="clear-cache-btn"
                         style="width: 100%; padding: 6px; background: #a43131; border:none; margin-top:5px; font-size: 11px;">⚠️
                         Delete Model Cache</button>
@@ -4307,8 +4325,39 @@ export async function clearIndexedDbStore(dbName, storeName) {
         const { state, subscribe } = createStore({
             status: "Initializing...",
             progress: 0,
-            activeModel: null
+            activeModel: null,
+            autoSave: true
         });
+
+        // --- UTILS: The Archivist ---
+        async function saveTurn(role, content) {
+            if (!state.autoSave || !window.db) return;
+            try {
+                const ts = Date.now();
+                const id = `msg_${ts}_${role}`;
+                // Minimal escape for Datalog string
+                const safeContent = content.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+                // Write to Memory (Embedding null for Dreamer to fix later)
+                const query = `
+                    :put memory {
+                        id: "${id}",
+                        timestamp: ${ts},
+                        role: "${role}",
+                        content: "${safeContent}",
+                        source: "root_console",
+                        embedding: null
+                    }
+                `;
+                await window.db.run(query);
+                ui.log(`💾 Memory Saved (${role})`, "debug");
+            } catch (e) {
+                ui.log(`Save Failed: ${e.message}`, "error");
+            }
+        }
+
+        // Expose toggle handler
+        window.toggleAutoSave = (checked) => { state.autoSave = checked; };
 
         // Bridge legacy UI logging to Sovereign Logger
         const ui = {
@@ -4518,6 +4567,7 @@ export async function clearIndexedDbStore(dbName, storeName) {
             }
 
             buildVirtualPrompt(systemPrompt, retrievedMemories, chatHistory, userText) {
+                const now = new Date().toLocaleString('en-US', { timeZoneName: 'short' });
                 const physicsInstruction = `
 ### COGNITIVE PROTOCOL:
 1. **TRUST THE CLUES:** You are operating in a "Sovereign" environment. The [CONTEXT CLUES] provided are the Ground Truth.
@@ -4525,6 +4575,9 @@ export async function clearIndexedDbStore(dbName, storeName) {
 3. **PATH OF LEAST ACTION:** The most efficient answer is the correct one.
 `;
                 return `
+### SYSTEM TIME
+${now}
+
 ### BACKGROUND INFORMATION
 ${retrievedMemories ? retrievedMemories : "No specific context available."} 
 
@@ -4599,6 +4652,7 @@ ${userText}
             document.getElementById('send-btn').disabled = true;
 
             ui.append("user", text);
+            if (state.autoSave) await saveTurn("user", text);
 
             try {
                 const { context, finalAnswer } = await contextManager.executeR1Loop(text, []);
@@ -4621,6 +4675,7 @@ ${userText}
                     fullAnswer += delta;
                     msgHandle.update(fullAnswer);
                 }
+                if (state.autoSave) await saveTurn("assistant", fullAnswer);
                 ui.log("✅ Response generated.", "success");
 
             } catch (e) {
@@ -4744,13 +4799,16 @@ ${userText}
                     const [keys] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
                     if (keys.length > 0) {
                         db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
+                        window.db = db;
                         ui.log("✅ Root Graph Connected (Persistent)", "success");
                     } else {
                         db = CozoDb.new();
+                        window.db = db;
                         ui.log("✅ Root Graph Created (Memory)", "info");
                     }
                 } catch (e) {
                     db = CozoDb.new();
+                    window.db = db;
                     ui.log("⚠️ Fallback to Memory Graph", "warn");
                 }
 
@@ -5243,6 +5301,19 @@ Install Chrome extension for automatic page context injection
         // Initialize Cozo
         let db;
         
+        async function runQuery(query, params = "{}", immutable = false) {
+            if (!db) throw new Error("Database not initialized");
+            const res = await db.run(query, params, immutable);
+            let parsed = res;
+            if (typeof res === 'string') {
+                try { parsed = JSON.parse(res); } catch (e) { 
+                    logger.warn("Failed to parse Cozo response: " + res);
+                }
+            }
+            if (parsed && parsed.ok === false) throw new Error(parsed.message);
+            return parsed;
+        }
+
         async function init() {
             try {
                 logger.info("Initializing Root Dreamer...");
@@ -5258,23 +5329,25 @@ Install Chrome extension for automatic page context injection
                     appendLog('main', "Connected to Transient Brain (In-Memory).", 'warn');
                 }
                 
+                appendLog('main', "DEBUG: Creating memory table...", 'info');
                 // Ensure tables exist (idempotent)
-                await db.run(`
+                await runQuery(`
                     :create memory {
-                        id: String,
+                        id: String =>
                         timestamp: Int,
                         role: String,
                         content: String,
                         source: String,
-                        embedding: [F32; 384]?
+                        embedding: <F32; 384>?
                     }
                 `);
                 
-                await db.run(`
+                appendLog('main', "DEBUG: Creating relationships table...", 'info');
+                await runQuery(`
                     :create relationships {
                         source_id: String,
                         target_id: String,
-                        type: String,
+                        type: String =>
                         weight: Float
                     }
                 `);
@@ -5318,10 +5391,9 @@ Install Chrome extension for automatic page context injection
                     :limit 1
                 `;
                 
-                const result = await db.run(query);
-                if (!result.ok) throw new Error(result.message);
+                const result = await runQuery(query);
 
-                if (result.rows.length === 0) {
+                if (!result.rows || result.rows.length === 0) {
                     appendLog('main', "No orphans found. Resting...", 'info');
                     await new Promise(r => setTimeout(r, 2000)); 
                     isLoopRunning = false;
@@ -5330,6 +5402,8 @@ Install Chrome extension for automatic page context injection
                 }
 
                 const [id, content] = result.rows[0];
+                if (!content) throw new Error(`Memory ${id} has no content.`);
+                
                 appendLog('main', `Dreaming on memory: ${id}...`);
                 
                 // Truncate content
@@ -5413,8 +5487,8 @@ ${JSON.stringify(relationships, null, 2)}`, 'json');
                         :put relationships {source_id: src, target_id: tgt, type: type, weight: w}
                     `;
                     
-                    const insertRes = await db.run(insertQuery, { rows });
-                    if (insertRes.ok) {
+                    const insertRes = await runQuery(insertQuery, JSON.stringify({ rows }));
+                    if (insertRes.ok !== false) {
                         store.state.processedCount++;
                         store.state.synapseCount += rows.length;
                         appendLog('main', `Synthesized ${rows.length} connections.`, 'success');

@@ -447,13 +447,20 @@
 
                 let embedding = rec.embedding || [];
                 if (!embedding.length) {
-                    const out = await embedder(content, { pooling: 'mean', normalize: true });
-                    embedding = Array.from(out.data);
+                    try {
+                        const out = await embedder(content, { pooling: 'mean', normalize: true });
+                        embedding = Array.from(out.data);
+                    } catch (e) {
+                        logger.warn(`Embedding failed for item in ${sourceName}, using zero vector.`);
+                        embedding = new Array(384).fill(0.0);
+                    }
                 }
 
-                const ts = rec.timestamp ? new Date(rec.timestamp).getTime() : Date.now();
-                const id = `${ts}-${Math.random().toString(36).substr(2, 9)}`;
+                // Hardened Timestamp Logic
+                let ts = rec.timestamp ? new Date(rec.timestamp).getTime() : Date.now();
+                if (isNaN(ts)) ts = Date.now();
 
+                const id = `${ts}-${Math.random().toString(36).substr(2, 9)}`;
                 const mime = rec.mime_type || null;
                 const ref = rec.blob_ref || null;
 
@@ -470,8 +477,30 @@
         }
 
         async function insertBatch(rows) {
-            const q = `?[id, ts, role, content, src, vec, mime, ref] <- $data :put memory { id, timestamp: ts, role, content, source: src, embedding: vec, mime_type: mime, blob_ref: ref }`;
-            await safeRun(q, JSON.stringify({ data: rows }));
+            // Strict Schema Mapping: Variables must match Schema column names for :put
+            const q = `
+                ?[id, timestamp, role, content, source, embedding, mime_type, blob_ref] <- $data
+                :put memory { id, timestamp, role, content, source, embedding, mime_type, blob_ref }
+            `;
+            
+            try {
+                await safeRun(q, JSON.stringify({ data: rows }));
+            } catch (e) {
+                logger.error(`Batch Insert Failed: ${e.message}`);
+                
+                // Fallback for Legacy Schema (6 columns)
+                // We must bind all 8 items from the input array, but only use the first 6
+                if (e.message.includes("column") || e.message.includes("arity")) {
+                    logger.warn("Retrying with legacy schema (ignoring binary fields)...");
+                    const legacyQ = `
+                        ?[id, timestamp, role, content, source, embedding, _mime, _ref] <- $data
+                        :put memory { id, timestamp, role, content, source, embedding }
+                    `;
+                    await safeRun(legacyQ, JSON.stringify({ data: rows }));
+                } else {
+                    throw e;
+                }
+            }
         }
 
         // --- 3. EVENT LISTENERS ---
