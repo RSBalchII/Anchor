@@ -269,10 +269,12 @@
 
         async function loadModel() {
             appendLog('main', `Loading Model: ${MODEL_ID}...`);
-            const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
 
             try {
                 await GPUController.withModelLoadLock("Dreamer-Init", async () => {
+                    // Create a new worker for the Dreamer to avoid conflicts with other components
+                    const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
+
                     // Use a more reliable model URL for the Dreamer
                     const config = {
                         model_list: [{
@@ -284,13 +286,26 @@
                         }]
                     };
 
-                    window.engine = await CreateWebWorkerMLCEngine(worker, "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
+                    // If there's an existing engine, try to dispose it gracefully
+                    if (window.engine && typeof window.engine.dispose === 'function') {
+                        try {
+                            await window.engine.dispose();
+                        } catch (disposeErr) {
+                            console.warn("Warning: Could not dispose existing engine:", disposeErr);
+                        }
+                    }
+
+                    // Use a dedicated engine instance for the Dreamer to avoid conflicts
+                    window.dreamerEngine = await CreateWebWorkerMLCEngine(worker, "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
                         appConfig: config,
                         initProgressCallback: (report) => {
                             elModel.textContent = report.text;
                             if (report.progress === 1) store.state.modelReady = true;
                         }
                     });
+
+                    // Make the engine available as window.engine for compatibility
+                    window.engine = window.dreamerEngine;
                 });
                 appendLog('main', "Model Loaded. Ready to dream.", 'success');
                 store.state.modelReady = true;
@@ -361,7 +376,7 @@
             isLoopRunning = true;
             try {
                 // Find memories that don't have relationships (orphan memories)
-                const query = `?[id, content] := *memory{id: id, content: content}, not *relationships{source_id: id, target_id: $tgt, type: $type} :limit 1`;
+                const query = `?[id, content] := *memory{id: id, content: content}, not *relationships{source_id: id} :limit 1`;
                 const result = await runQuery(query);
 
                 if (!result.rows || result.rows.length === 0) {
@@ -379,44 +394,61 @@
                 const prompt = `Analyze this memory. Output Step 1: Thoughts (monologue) and Step 2: JSON array of concepts. Use <thought> and <json> tags. Memory: ${safeContent}`;
 
                 await GPUController.withLock("Dreamer-Think", async () => {
-                    const response = await window.engine.chat.completions.create({
-                        messages: [{ role: "user", content: prompt }],
-                        temperature: 0.3,
-                        max_tokens: 1024
-                    });
-                    
-                    const rawReply = response.choices[0].message.content;
-                    const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
-                    const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
-
-                    if (thoughtMatch) appendLog('thoughts', `[${id}] ${thoughtMatch[1].trim()}`, 'thought');
-                    
-                    let relationships = [];
                     try {
-                        let jsonStr = jsonMatch ? jsonMatch[1] : rawReply;
-                        jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-                        const start = jsonStr.indexOf('[');
-                        const end = jsonStr.lastIndexOf(']');
-                        if (start !== -1 && end !== -1) {
-                            relationships = JSON.parse(jsonStr.substring(start, end + 1));
-                            appendLog('synapses', `[${id}] Synthesized ${relationships.length} links.`, 'json');
-                        }
-                    } catch (pe) {
-                        relationships = [{ target: "failed_parse", type: "system_flag", weight: 0.0 }];
-                    }
+                        // Use the dedicated dreamer engine
+                        const response = await (window.dreamerEngine || window.engine).chat.completions.create({
+                            messages: [{ role: "user", content: prompt }],
+                            temperature: 0.3,
+                            max_tokens: 1024
+                        });
 
-                    const rows = relationships.map(r => [String(id), String(r.target || "unknown"), String(r.type || 'relates_to'), parseFloat(r.weight || 0.5)]);
-                    if (rows.length > 0) {
-                        await runQuery(`?[src, tgt, type, w] <- $rows :put relationships {source_id: src, target_id: tgt, type: type, weight: w}`, JSON.stringify({ rows }));
-                        store.state.processedCount++;
-                        store.state.synapseCount += rows.length;
+                        const rawReply = response.choices[0].message.content;
+                        const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
+                        const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
+
+                        if (thoughtMatch) appendLog('thoughts', `[${id}] ${thoughtMatch[1].trim()}`, 'thought');
+
+                        let relationships = [];
+                        try {
+                            let jsonStr = jsonMatch ? jsonMatch[1] : rawReply;
+                            jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+                            const start = jsonStr.indexOf('[');
+                            const end = jsonStr.lastIndexOf(']');
+                            if (start !== -1 && end !== -1) {
+                                relationships = JSON.parse(jsonStr.substring(start, end + 1));
+                                appendLog('synapses', `[${id}] Synthesized ${relationships.length} links.`, 'json');
+                            }
+                        } catch (pe) {
+                            relationships = [{ target: "failed_parse", type: "system_flag", weight: 0.0 }];
+                        }
+
+                        const rows = relationships.map(r => [String(id), String(r.target || "unknown"), String(r.type || 'relates_to'), parseFloat(r.weight || 0.5)]);
+                        if (rows.length > 0) {
+                            await runQuery(`?[src, tgt, type, w] <- $rows :put relationships {source_id: src, target_id: tgt, type: type, weight: w}`, JSON.stringify({ rows }));
+                            store.state.processedCount++;
+                            store.state.synapseCount += rows.length;
+                        }
+                    } catch (inferenceError) {
+                        // Check if this is the disposal error
+                        if (inferenceError.message &&
+                            (inferenceError.message.includes("disposed") ||
+                             inferenceError.message.includes("external Instance reference no longer exists"))) {
+                            appendLog('main', "Engine disposed, reloading model...", 'warn');
+                            store.state.modelReady = false;
+                            // Don't throw here, just return to let the retry mechanism handle it
+                            return;
+                        }
+                        throw inferenceError; // Re-throw other errors
                     }
                 });
                 await new Promise(r => setTimeout(r, 2000));
             } catch (err) {
                 const msg = err.message || String(err);
                 appendLog('main', `Dream Error: ${msg}`, 'error');
-                if (msg.includes("Model not loaded") || msg.includes("Tokenizer")) {
+                if (msg.includes("Model not loaded") ||
+                    msg.includes("Tokenizer") ||
+                    msg.includes("disposed") ||
+                    msg.includes("external Instance reference no longer exists")) {
                     store.state.modelReady = false;
                     await loadModel();
                 }
