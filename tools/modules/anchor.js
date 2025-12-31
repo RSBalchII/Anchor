@@ -127,7 +127,7 @@ export async function initCozo(wasmUrl = '../cozo_lib_wasm_bg.wasm') {
 
 // --- 5. THE BLOCKER (GPU Mutex) ---
 class GPUController {
-    static get BRIDGE_URL() { return 'http://localhost:8080'; }
+    static get BRIDGE_URL() { return 'http://localhost:8000'; }
 
     // System Consciousness States
     static States = {

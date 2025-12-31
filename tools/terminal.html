@@ -100,7 +100,7 @@
 <body>
     <div id="terminal-output">
         <div class="line info">Welcome to the Neural Shell v1.0</div>
-        <div class="line info">Bridge: http://localhost:8080 | Protocol: /v1/shell/exec</div>
+        <div class="line info">Bridge: http://localhost:8000 | Protocol: /v1/shell/exec</div>
         <div class="line">--------------------------------------------------</div>
     </div>
 
@@ -117,7 +117,7 @@
             status: document.getElementById('status-light')
         };
 
-        const BRIDGE_URL = "http://localhost:8080";
+        const BRIDGE_URL = "http://localhost:8000";
         const TOKEN = "sovereign-secret"; // Hardcoded for local dev
 
         function log(msg, type = 'system-out') {

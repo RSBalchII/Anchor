@@ -33,16 +33,22 @@ The Kernel provides a standardized loader: `initCozo(wasmPath)`.
 - **Mechanism**: Dumps full Cozo relations (including vectors) to a JSON file.
 - **Use Case**: Transfer full "Brain" state between devices or backup.
 
+### Search Enhancement (BM25 FTS)
+- **Hybrid Retrieval**: Combines vector search (semantic) with BM25 FTS (lexical) for optimal results.
+- **Index Creation**: FTS index created during initialization: `::fts create memory:content_fts`
+- **Stemming Support**: Uses English stemming for better word variation matching.
+- **Fallback Mechanism**: Maintains regex-based search when FTS index unavailable.
+
 ### Schema
 ```datalog
 :create memory {
-    id: String 
-    => 
-    timestamp: Int, 
-    role: String, 
-    content: String, 
-    source: String, 
-    embedding: <F32; 384> 
+    id: String
+    =>
+    timestamp: Int,
+    role: String,
+    content: String,
+    source: String,
+    embedding: <F32; 384>
 }
 ```
 

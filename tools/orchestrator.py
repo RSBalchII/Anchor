@@ -4,7 +4,7 @@ import json
 import logging
 
 # Config - Defaults match start-bridge.bat
-BRIDGE_PORT = os.getenv("BRIDGE_PORT", "8080")
+BRIDGE_PORT = os.getenv("BRIDGE_PORT", "8000")
 BRIDGE_HOST = os.getenv("BRIDGE_HOST", "localhost")
 BRIDGE_URL = f"http://{BRIDGE_HOST}:{BRIDGE_PORT}"
 MLC_INFERENCE_ENDPOINT = f"{BRIDGE_URL}/v1/chat/completions"

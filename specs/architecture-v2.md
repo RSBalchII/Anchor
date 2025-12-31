@@ -14,6 +14,7 @@ The Ghost is a background process responsible solely for loading the LLM into VR
     * Load Weights (MLC-LLM).
     * Serve `localhost:8080/v1/chat/completions`.
     * **Stealth Mode:** Uses `NoCacheStaticFiles` to treat models as RAM-only data, bypassing browser storage quotas.
+    * **Search Engine:** Provides hybrid search (Vector + BM25 FTS) via CozoDB WASM.
 
 ## 3. Component B: The Shell (Native Client)
 The Shell is the user interface, residing in the user's native terminal environment (PowerShell, Bash, etc.).

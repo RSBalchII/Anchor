@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sovereign Console | Launcher</title>
+    <title>Anchor Core | Launcher</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -18,7 +18,7 @@
             font-family: 'Segoe UI', system-ui, sans-serif;
             background-color: var(--bg-color);
             color: var(--text);
-            margin: 0;
+            margin-top: 45vh;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -95,12 +95,12 @@
 
 <body>
 
-    <h1>SOVEREIGN <span style="color:var(--accent); font-weight:600;">CONSOLE</span></h1>
+    <h1>ANCHOR <span style="color:var(--accent); font-weight:600;">CORE</span></h1>
 
     <div class="grid">
-        <a href="model-server-chat.html" class="card">
+        <a href="chat.html" class="card">
             <div class="icon">💬</div>
-            <div class="title">Sovereign Chat</div>
+            <div class="title">Anchor Chat</div>
             <div class="desc">The core WebGPU interface. Run LLMs locally with memory integration.</div>
             <div class="status">Active</div>
         </a>
@@ -112,32 +112,32 @@
             <div class="status">Utility</div>
         </a>
 
-        <a href="sovereign-db-builder.html" class="card">
+        <a href="db_builder.html" class="card">
             <div class="icon">🧠</div>
-            <div class="title">Memory Builder</div>
+            <div class="title">DB Builder</div>
             <div class="desc">Manage and build the CozoDB memory store.</div>
             <div class="status">Admin</div>
         </a>
 
-        <a href="root-mic.html" class="card">
+        <a href="anchor-mic.html" class="card">
             <div class="icon">🎙️</div>
             <div class="title">Root Mic</div>
             <div class="desc">Dictate directly to the engine using Whisper.</div>
             <div class="status">Input</div>
         </a>
 
-        <a href="root-dreamer.html" class="card">
-            <div class="icon">🌙</div>
-            <div class="title">Root Dreamer</div>
-            <div class="desc">The synthetic subconscious. Background memory consolidation and association.</div>
+        <a href="memory-builder.html" class="card">
+            <div class="icon">🧠</div>
+            <div class="title">Memory Builder</div>
+            <div class="desc">Background memory consolidation and association.</div>
             <div class="status">Subconscious</div>
         </a>
 
-        <a href="neural-terminal.html" class="card">
+        <a href="terminal.html" class="card">
             <div class="icon">💻</div>
-            <div class="title">Neural Terminal</div>
+            <div class="title">Terminal</div>
             <div class="desc">Direct shell access. Command the host via the Neural Shell Protocol.</div>
-            <div class="status">Sovereign</div>
+            <div class="status">Active</div>
         </a>
 
         <div class="card" onclick="spawnAnchorShell()">
@@ -155,14 +155,20 @@
     <script>
     async function spawnAnchorShell() {
         try {
-            const res = await fetch('http://localhost:8080/v1/system/spawn_shell', {
+            const res = await fetch('http://localhost:8000/v1/system/spawn_shell', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sovereign-secret' },
                 body: JSON.stringify({})
             });
-            if (res.ok) console.log("Anchor Shell Spawned");
-            else alert("Failed to spawn. Is Bridge running?");
-        } catch (e) { alert("Error: " + e.message); }
+            if (res.ok) {
+                console.log("Anchor Shell Spawned");
+                alert("Anchor terminal launched in new PowerShell window!");
+            } else {
+                alert("Failed to spawn. Is Bridge running?");
+            }
+        } catch (e) {
+            alert("Error: " + e.message);
+        }
     }
     </script>
 

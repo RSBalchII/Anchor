@@ -1,6 +1,12 @@
 # Context-Engine Changelog
 
-## [2.0.0] - 2025-12-29 "Unified Anchor"
+## [2.0.1] - 2025-12-30 "Server Stability & Endpoint Fixes"
+
+### Fixed
+- **Server Startup Issues**: Resolved server hanging issues caused by problematic path parameter syntax (`:path`) in route definitions that prevented proper server startup
+- **Missing Endpoints**: Added critical missing endpoints (`/v1/models/pull`, `/v1/models/pull/status`, `/v1/gpu/lock`, `/v1/gpu/status`, etc.) that were documented but missing from implementation
+- **Endpoint Accessibility**: Verified all documented endpoints are now accessible and responding properly
+- **Model Availability**: Improved model availability testing showing that `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` and `Qwen2.5-7B-Instruct-q4f16_1-MLC` have most files available (missing only `params.json`)
 
 ### Architecture Shift
 - **Unified Anchor Core**: Consolidated Bridge, File Server, and UI into a single process (`webgpu_bridge.py`) running on **Port 8000**.
