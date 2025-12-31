@@ -50,8 +50,8 @@ class GPUHotReloader {
             const gpuFiles = [
                 'tools/modules/anchor.js',
                 'tools/model-server-chat.html',
-                'tools/root-mic.html',
-                'tools/root-dreamer.html'
+                'tools/anchor-mic.html',
+                'tools/memory-builder.html'
             ];
 
             for (const file of gpuFiles) {

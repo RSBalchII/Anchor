@@ -1,7 +1,7 @@
-# Root Coda Roadmap (V2.1)
+# Anchor Core Roadmap (V2.2)
 
-**Status:** Ghost & Shell Architecture Deployed
-**Focus:** Hardening, Consolidation, and Hygiene.
+**Status:** Unified Architecture Deployed
+**Focus:** Model Loading Reliability & Endpoint Completeness.
 
 ## Phase 1: Foundation (Completed)
 - [x] Pivot to WebLLM/WebGPU stack.
@@ -27,14 +27,27 @@
 - [x] **Temporal Awareness**: Ground the model in real-time.
 - [x] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
 
-## Phase 4: Ghost & Shell Architecture
+## Phase 4: Ghost & Shell Architecture (Completed)
 - [x] **Phase 1:** "Stealth Mode" Cache Bypass (Completed).
 - [x] **Phase 2:** Headless Browser Script (`launch-ghost.ps1`) (Completed).
 - [x] **Phase 3:** `sov.py` Native Client Implementation.
 - [x] **Phase 4:** Neural Shell Protocol (`/v1/shell/exec` endpoint).
 - [x] **Phase 4.5:** Ghost Auto-Ignition (Auto-start with ?headless=true flag).
 - [x] **Phase 5:** Native Shell Implementation (Anchor terminal with spawn endpoint).
+- [x] **Phase 6:** Unified Anchor Core (Single-process architecture on port 8000).
 - [ ] **Phase 7:** Migration to C++ Native Runtime (Removing Chrome entirely).
+
+## Phase 5: Model Loading Reliability (Completed)
+- [x] **URL Construction Fix**: Implemented `/models/{model}/resolve/main/{file}` redirect for MLC-LLM compatibility.
+- [x] **File Renaming**: Standardized component names (`anchor-mic.html`, `memory-builder.html`, `db_builder.html`).
+- [x] **Server Stability**: Fixed hanging issues with problematic path parameter syntax.
+- [x] **Endpoint Completeness**: Verified all documented endpoints are accessible.
+
+## Phase 5.5: Search Enhancement (Completed)
+- [x] **BM25 Implementation**: Replaced regex-based search with CozoDB FTS using BM25 algorithm.
+- [x] **Hybrid Search**: Combined vector search (semantic) with BM25 (lexical) for better results.
+- [x] **Index Creation**: Added FTS index creation in memory initialization routines.
+- [x] **Stemming Support**: Enabled English stemming for improved word variation matching.
 
 ## Phase 6: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).

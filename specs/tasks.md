@@ -5,8 +5,28 @@
 ### Phase 5: Unified Anchor (Completed)
 - [x] **Consolidation**: Merge File Server and Bridge into `webgpu_bridge.py` (Port 8000).
 - [x] **Renaming**: `model-server-chat` -> `chat.html`, `neural-terminal` -> `terminal.html`.
-- [x] **Cleanup**: Archive `anchor.py` and legacy startup scripts.
+- [x] **Cleanup**: Archive legacy startup scripts.
 - [x] **Launcher**: Create `start-anchor.bat`.
+- [x] **Native Shell Spawning**: Implement `/v1/system/spawn_shell` endpoint.
+- [x] **Dashboard Integration**: Add Anchor Shell spawn button to `index.html`.
+- [x] **Native Client**: Create `anchor.py` for PowerShell terminal spawning.
+- [x] **Architecture Documentation**: Create Anchor Core specification.
+- [x] **Testing Suite**: Create `test_model_loading.py` and `model_test.html` for endpoint verification.
+- [x] **Troubleshooting Documentation**: Add model loading troubleshooting standard.
+
+### Phase 5.1: Model Loading Fixes (Completed)
+- [x] **URL Construction Fix**: Implement `/models/{model}/resolve/main/{file}` redirect endpoint for MLC-LLM compatibility.
+- [x] **File Renaming**: Rename `root-mic.html` -> `anchor-mic.html`, `root-dreamer.html` -> `memory-builder.html`, `sovereign-db-builder.html` -> `db_builder.html`.
+- [x] **UI Layout Fix**: Add proper margins to prevent elements from being cut off at top of browser window.
+- [x] **Server Stability**: Fix server hanging issues caused by problematic path parameter syntax.
+- [x] **Endpoint Verification**: Ensure all documented endpoints are accessible and responding properly.
+
+### Phase 5.2: Search Enhancement (Completed)
+- [x] **BM25 Implementation**: Replace regex-based search with CozoDB FTS using BM25 algorithm in `tools/chat.html`.
+- [x] **Index Creation**: Add FTS index creation in `memory-builder.html`, `db_builder.html`, and `chat.html` initialization.
+- [x] **Hybrid Search**: Maintain vector search alongside BM25 for semantic + lexical retrieval.
+- [x] **Fallback Mechanism**: Implement regex fallback if FTS index is unavailable.
+- [x] **Stemming Support**: Enable English stemming for better word variation matching.
 
 ### Completed - Root Refactor ✅
 - [x] **Kernel**: Implement `tools/modules/sovereign.js`.

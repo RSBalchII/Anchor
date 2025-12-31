@@ -23,8 +23,9 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;
+            padding: 8px; /* Add padding to prevent cutoff */
+            overflow: auto; /* Allow scrolling if needed */
         }
 
         .container {

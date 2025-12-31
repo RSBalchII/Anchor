@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Root Coda Console</title>
+    <title>Anchor Console</title>
     <style>
         * {
             box-sizing: border-box;
@@ -15,16 +15,21 @@
             color: #ccc;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
+            padding-top: 8px; /* Add small top padding to prevent cutoff */
+            padding-bottom: 8px; /* Add small bottom padding */
         }
 
         /* --- Resizable Split Layout --- */
         #container {
             display: flex;
             width: 100%;
-            height: 100vh;
+            min-height: calc(100vh - 16px); /* Account for body padding */
+            height: auto;
             overflow: hidden;
+            margin: 8px; /* Add margin to prevent cutoff */
+            border-radius: 8px; /* Add slight rounding to match margin */
         }
 
         #sidebar {
@@ -132,7 +137,7 @@
 
         .user {
             background: #005f3b;
-            /* Root Green-ish */
+            /* Anchor Green */
             color: white;
             align-self: flex-end;
             margin-left: auto;
@@ -334,7 +339,7 @@
         <div id="sidebar">
             <div
                 style="padding: 10px; font-weight: bold; font-size: 16px; border-bottom: 1px solid #444; color: #00ff88;">
-                ⚡ ROOT CODA
+                ⚡ ANCHOR CONSOLE
             </div>
             <small id="status-text" style="padding: 0 10px;">Initializing...</small>
             <div id="progress-bar" style="margin: 8px 10px 15px 10px;">
@@ -439,8 +444,7 @@
                     <div
                         style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px;">
                         <input type="checkbox" id="enable-bridge-toggle" onchange="toggleBridge(this.checked)">
-                        <label for="enable-bridge-toggle" style="font-size: 11px; cursor: pointer;">Enable Wave Bridge
-                            (ws:8080)</label>
+                        <label for="enable-bridge-toggle" style="font-size: 11px; cursor: pointer;">Enable Bridge Connection</label>
                         <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected
                         </div>
                     </div>
@@ -770,49 +774,87 @@
                     } catch (e) { console.warn("Vector Search failed", e); }
                 }
 
-                // 2. GENERATE KEYWORD QUERY (Lexical) - OPTIMIZED
-                const rawWords = userText.match(/[a-zA-Z0-9_\-]+/g) || [];
-                const stopWords = new Set(['the', 'and', 'is', 'in', 'at', 'of', 'on', 'for', 'to', 'it', 'this', 'that', 'what', 'who', 'how', 'why', 'when', 'where', 'tell', 'me', 'about', 'could', 'would']);
+                // 2. BM25 SEARCH (Lexical) - REPLACES REGEX SEARCH
+                // This replaces the manual "Regex" loop with CozoDB's native FTS using BM25
+                try {
+                    // Cozo FTS Syntax: ~index_name { yield_fields | query: $q }
+                    const ftsQuery = `
+                        ?[id, content, score, timestamp] := ~memory:content_fts{
+                            id, content, timestamp |
+                            query: $q,
+                            k: 20  # Get top 20 matches by BM25 score
+                        }
+                        :order -score
+                    `;
 
-                // Score words: Capitalized or Numbers get higher priority
-                const scoredWords = rawWords.map(w => {
-                    let score = 0;
-                    const clean = w.replace(/^[-_]+|[-_]+$/g, '');
-                    if (clean.length <= 3 && !/^\d+$/.test(clean)) return null; // Skip short words unless numbers
-                    if (stopWords.has(clean.toLowerCase())) return null;
+                    // Pass the raw user text. BM25 handles stop words and importance automatically.
+                    const res = await this.db.run(ftsQuery, JSON.stringify({ q: userText }));
 
-                    // Priority Scoring
-                    if (/^[A-Z]/.test(clean)) score += 2; // Capitalized (Proper Noun)
-                    if (/^\d+$/.test(clean)) score += 3;  // Numbers (Dates/Years)
+                    if (res.rows) {
+                         res.rows.forEach(r => {
+                            // Use BM25 score for ranking
+                            const item = {
+                                id: r[0],
+                                content: r[1],
+                                score: r[2],
+                                ts: r[3],
+                                source: 'BM25'
+                            };
 
-                    return { word: clean, score };
-                }).filter(w => w);
-
-                // Sort by score (descending) and take top 5
-                scoredWords.sort((a, b) => b.score - a.score);
-                const keywords = scoredWords.slice(0, 5).map(w => w.word);
-
-                if (keywords.length > 0) {
-                    // Process top 5 keywords for better accuracy
-                    for (const keyword of keywords) {
-                        const kwQuery = `?[id, content, timestamp] := *memory{id: id, content: content, timestamp: timestamp}, regex_matches(content, '(?i)${keyword}') :sort -timestamp :limit 5`;
-                        try {
-                            const res = await this.db.run(kwQuery, "{}");
-                            const parsed = ResponsePattern.match(res);
-                            if (parsed.rows) {
-                                parsed.rows.forEach(r => {
-                                    const item = { id: r[0], content: r[1], dist: 0, ts: r[2], source: 'lexical' };
-                                    if (!combined.has(item.content)) {
-                                        combined.set(item.content, item); // Add only if not already present (deduplicate)
-                                    }
-                                });
+                            // Deduplicate: If Vector found it, maybe boost score?
+                            if (!combined.has(item.content)) {
+                                combined.set(item.content, item);
                             }
-                        } catch (e) { console.warn(`Keyword search failed for '${keyword}':`, e); }
+                        });
+                    }
+                } catch (e) {
+                    // Fallback if index missing
+                    console.warn("BM25 Search failed (Index missing?):", e);
+
+                    // Fallback to original regex approach if BM25 index doesn't exist
+                    const rawWords = userText.match(/[a-zA-Z0-9_\-]+/g) || [];
+                    const stopWords = new Set(['the', 'and', 'is', 'in', 'at', 'of', 'on', 'for', 'to', 'it', 'this', 'that', 'what', 'who', 'how', 'why', 'when', 'where', 'tell', 'me', 'about', 'could', 'would']);
+
+                    // Score words: Capitalized or Numbers get higher priority
+                    const scoredWords = rawWords.map(w => {
+                        let score = 0;
+                        const clean = w.replace(/^[-_]+|[-_]+$/g, '');
+                        if (clean.length <= 3 && !/^\d+$/.test(clean)) return null; // Skip short words unless numbers
+                        if (stopWords.has(clean.toLowerCase())) return null;
+
+                        // Priority Scoring
+                        if (/^[A-Z]/.test(clean)) score += 2; // Capitalized (Proper Noun)
+                        if (/^\d+$/.test(clean)) score += 3;  // Numbers (Dates/Years)
+
+                        return { word: clean, score };
+                    }).filter(w => w);
+
+                    // Sort by score (descending) and take top 5
+                    scoredWords.sort((a, b) => b.score - a.score);
+                    const keywords = scoredWords.slice(0, 5).map(w => w.word);
+
+                    if (keywords.length > 0) {
+                        // Process top 5 keywords for better accuracy
+                        for (const keyword of keywords) {
+                            const kwQuery = `?[id, content, timestamp] := *memory{id: id, content: content, timestamp: timestamp}, regex_matches(content, '(?i)${keyword}') :sort -timestamp :limit 5`;
+                            try {
+                                const res = await this.db.run(kwQuery, "{}");
+                                const parsed = ResponsePattern.match(res);
+                                if (parsed.rows) {
+                                    parsed.rows.forEach(r => {
+                                        const item = { id: r[0], content: r[1], dist: 0, ts: r[2], source: 'lexical' };
+                                        if (!combined.has(item.content)) {
+                                            combined.set(item.content, item); // Add only if not already present (deduplicate)
+                                        }
+                                    });
+                                }
+                            } catch (e) { console.warn(`Keyword search failed for '${keyword}':`, e); }
+                        }
                     }
                 }
 
-                // Return top 10 unique items
-                return Array.from(combined.values()).slice(0, 10);
+                // Return top 15 unique items
+                return Array.from(combined.values()).slice(0, 15);
             }
 
             // EXISTING: Formats the data for the R1 Reasoning Loop
@@ -1113,7 +1155,7 @@
 
                         model_list: [
                             {
-                                "model": "http://localhost:8080/models/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
+                                "model": window.location.origin + "/models/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC/resolve/main/",
                                 "model_id": "mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
                                 "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                                 "vram_required_MB": 2000,
@@ -1130,7 +1172,7 @@
                                 ]
                             },
                             {
-                                "model": "http://localhost:8080/models/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
+                                "model": window.location.origin + "/models/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC/resolve/main/",
                                 "model_id": "mlc-ai/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
                                 "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                                 "vram_required_MB": 2000,
@@ -1147,7 +1189,7 @@
                                 ]
                             },
                             {
-                                "model": "http://localhost:8080/models/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
+                                "model": window.location.origin + "/models/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC/resolve/main/",
                                 "model_id": "mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC",
                                 "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                                 "vram_required_MB": 2000,
@@ -1158,7 +1200,7 @@
                                 }
                             },
                             {
-                                "model": "http://localhost:8080/models/DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
+                                "model": window.location.origin + "/models/DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC/resolve/main/",
                                 "model_id": "mlc-ai/DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC",
                                 "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Llama-3_1-8B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                                 "vram_required_MB": 2000,
@@ -1169,7 +1211,7 @@
                                 }
                             },
                             {
-                                "model": "http://localhost:8080/models/Qwen2.5-7B-Instruct-q4f16_1-MLC",
+                                "model": window.location.origin + "/models/Qwen2.5-7B-Instruct-q4f16_1-MLC/resolve/main/",
                                 "model_id": "mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC",
                                 "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                                 "vram_required_MB": 2000,
@@ -1184,12 +1226,14 @@
 
                     // 2.5: CHECK AND DOWNLOAD MODEL LOCALLY IF NEEDED
                     const strippedId = selectedModelId.split('/').pop(); // "mlc-ai/foo" -> "foo"
-                    const localModelUrl = `http://localhost:8080/models/${strippedId}/ndarray-cache.json`;
+                    // Sanitize the path to ensure it's safe for URL construction
+                    const safeStrippedId = strippedId.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const localModelUrl = `${window.location.origin}/models/${safeStrippedId}/ndarray-cache.json`;
                     const check = await fetch(localModelUrl, { method: 'HEAD' });
 
                     if (!check.ok) {
                         ui.log(`⬇️ Model missing locally. Initiating On-Demand Pull...`, "warn");
-                        const pullRes = await fetch('http://localhost:8080/v1/models/pull', { // Fixed Port
+                        const pullRes = await fetch('/v1/models/pull', { // Use relative path to current server
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1203,7 +1247,7 @@
                             // Poll for completion
                             while (true) {
                                 await new Promise(r => setTimeout(r, 2000));
-                                const statusRes = await fetch(`http://localhost:8080/v1/models/pull/status?id=${selectedModelId}`); // Fixed Port
+                                const statusRes = await fetch(`/v1/models/pull/status?id=${selectedModelId}`); // Use relative path to current server
                                 const status = await statusRes.json();
                                 if (status.status === "done") {
                                     ui.log("✅ Download Complete!", "success");
@@ -1229,8 +1273,12 @@
                     const modelExists = appConfig.model_list.some(model => model.model_id === selectedModelId);
                     if (!modelExists) {
                         // Add the selected model to the configuration with cache disabled
+                        // Use full URL format to match the existing appConfig structure with resolve/main pattern
+                        const strippedModelId = selectedModelId.split('/').pop(); // Extract just the model name part
+                        // Ensure the model path is properly formatted (no special characters that could break URL parsing)
+                        const safeModelPath = strippedModelId.replace(/[^a-zA-Z0-9._-]/g, '_'); // Sanitize path
                         appConfig.model_list.push({
-                            model: `https://huggingface.co/${selectedModelId}/resolve/main/`,
+                            model: window.location.origin + `/models/${safeModelPath}/resolve/main/`,
                             model_id: selectedModelId,
                             model_lib: modelLib,
                             vram_required_MB: 2000,
@@ -1409,6 +1457,20 @@
                     ui.log("✅ Neural Embedder Ready", "success");
                 } catch (e) { ui.log("⚠️ Embedder Skipped (Timeout)", "warn"); }
 
+                // 3. Ensure FTS Index for BM25 Search
+                try {
+                    // Create FTS index for BM25 search on content field if it doesn't exist
+                    await db.run("::fts create memory:content_fts { extractor: content, tokenizer: Simple, filters: [Lowercase, AlphaNumOnly, Stemmer('english')] }", "{}");
+                    ui.log("✅ FTS Index Created for BM25 Search", "success");
+                } catch (e) {
+                    // Index might already exist, which is fine
+                    if (!e.message.includes('already exists') && !e.message.includes('conflicts')) {
+                        ui.log("⚠️ FTS Index creation failed (may already exist): " + e.message, "warn");
+                    } else {
+                        ui.log("✅ FTS Index already exists", "success");
+                    }
+                }
+
             } catch (e) {
                 ui.log(`Init Error: ${e.message}`, "error");
             } finally {
@@ -1497,7 +1559,7 @@
         // GPU Status Check and Force Unlock Handler
         async function checkGPUStatus() {
             try {
-                const res = await fetch("http://localhost:8080/v1/gpu/status", {
+                const res = await fetch("/v1/gpu/status", {
                     method: "GET",
                     headers: { "Authorization": "Bearer sovereign-secret" }
                 });
@@ -1537,7 +1599,7 @@
                 ui.log("Sending Force Unlock signal...", "warn");
 
                 // First try the standard reset
-                let res = await fetch("http://localhost:8080/v1/gpu/reset", {
+                let res = await fetch("/v1/gpu/reset", {
                     method: "POST",
                     headers: { "Authorization": "Bearer sovereign-secret" }
                 });
@@ -1548,7 +1610,7 @@
                     ui.log(`Standard unlock failed: ${res.status}. Trying emergency release...`, "warn");
 
                     // If standard unlock failed, try the emergency endpoint
-                    res = await fetch("http://localhost:8080/v1/gpu/force-release-all", {
+                    res = await fetch("/v1/gpu/force-release-all", {
                         method: "POST",
                         headers: { "Authorization": "Bearer sovereign-secret" }
                     });
@@ -1573,7 +1635,10 @@
                     return;
                 }
 
-                bridgeWs = new WebSocket("ws://localhost:8080/ws/chat");
+                // Use the same host and port as the current page for WebSocket connection
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsHost = window.location.host; // This will be 'localhost:8000' when served from the bridge
+                bridgeWs = new WebSocket(`${wsProtocol}//${wsHost}/ws/chat`);
                 bridgeWs.onopen = () => { document.getElementById('bridge-status').innerText = "🟢 Connected"; ui.log("Bridge Online", "success"); };
                 bridgeWs.onmessage = async (e) => {
                     const msg = JSON.parse(e.data);

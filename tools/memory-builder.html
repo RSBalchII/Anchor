@@ -434,7 +434,17 @@
                 try {
                     await runQuery(":create memory { id: String => timestamp: Int, role: String, content: String, source: String, embedding: <F32; 384>? }");
                 } catch (e) {
-                    if (!e.message.includes('conflicts')) throw e; 
+                    if (!e.message.includes('conflicts')) throw e;
+                }
+
+                // Create FTS index for BM25 search on content field
+                try {
+                    await runQuery("::fts create memory:content_fts { extractor: content, tokenizer: Simple, filters: [Lowercase, AlphaNumOnly, Stemmer('english')] }");
+                } catch (e) {
+                    // Index might already exist, which is fine
+                    if (!e.message.includes('already exists') && !e.message.includes('conflicts')) {
+                        console.warn("FTS index creation failed (may already exist):", e.message);
+                    }
                 }
 
                 try {

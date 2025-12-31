@@ -367,6 +367,18 @@
                         blob_ref: String?
                     }
                 `, "{}");
+
+                // Create FTS index for BM25 search on content field
+                try {
+                    await safeRun("::fts create memory:content_fts { extractor: content, tokenizer: Simple, filters: [Lowercase, AlphaNumOnly, Stemmer('english')] }", "{}");
+                    logger.success("FTS Index Created for BM25 Search.");
+                } catch (ftsErr) {
+                    // Index might already exist, which is fine
+                    if (!ftsErr.message.includes('already exists') && !ftsErr.message.includes('conflicts')) {
+                        logger.warn("FTS index creation failed (may already exist): " + ftsErr.message);
+                    }
+                }
+
                 logger.success("Schema Created.");
             }
         }

@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import asyncio
+import time
 import uvicorn
 import json
 import uuid
@@ -32,6 +33,52 @@ app.add_middleware(
 # --- STATE ---
 workers: Dict[str, WebSocket] = {"chat": None}
 active_requests: Dict[str, asyncio.Queue] = {}
+
+# --- MODEL RESOLVE REDIRECT (for MLC-LLM compatibility) ---
+# Handle the /resolve/main/ pattern that MLC-LLM expects for local models
+@app.get("/models/{model_name}/resolve/main/{file_path}")
+@app.head("/models/{model_name}/resolve/main/{file_path}")
+@app.options("/models/{model_name}/resolve/main/{file_path}")
+async def model_resolve_redirect(model_name: str, file_path: str, request: Request):
+    """Redirect MLC-LLM /resolve/main/ requests to actual local model files"""
+    import os
+    from fastapi.responses import FileResponse, JSONResponse
+    from starlette.responses import Response
+
+    # Construct path to actual model file
+    models_base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+    actual_path = os.path.join(models_base, model_name, file_path)
+
+    # Check if the file exists in the actual model directory
+    if os.path.exists(actual_path) and os.path.isfile(actual_path):
+        # For HEAD requests, return a minimal response with correct headers
+        if request.method == "HEAD":
+            # Get file size for Content-Length header
+            file_size = os.path.getsize(actual_path)
+            return Response(
+                status_code=200,
+                headers={
+                    "content-type": "application/json" if actual_path.endswith(('.json', '.config')) else "application/octet-stream",
+                    "content-length": str(file_size)
+                }
+            )
+        # For OPTIONS requests (CORS preflight), return appropriate headers
+        elif request.method == "OPTIONS":
+            return Response(
+                status_code=200,
+                headers={
+                    "access-control-allow-origin": "*",
+                    "access-control-allow-methods": "GET, HEAD, OPTIONS",
+                    "access-control-allow-headers": "*",
+                    "access-control-max-age": "86400"
+                }
+            )
+        else:
+            return FileResponse(actual_path)
+    else:
+        # If file doesn't exist, return 404
+        return JSONResponse(status_code=404, content={"error": f"File {file_path} not found for model {model_name}"})
+
 
 # --- STATIC ASSETS (No-Cache for Models) ---
 class NoCacheStaticFiles(StaticFiles):
@@ -114,6 +161,166 @@ async def shell_exec(request: Request):
         }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/v1/system/spawn_shell")
+async def spawn_shell(request: Request):
+    """Spawns a new PowerShell window running the Anchor terminal client"""
+    try:
+        print("⚓ SPAWN: Launching Anchor Shell")
+
+        # Get the directory where this script is located
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Path to the anchor.py script
+        anchor_script = os.path.join(script_dir, "anchor.py")
+
+        # Command to start a new PowerShell window running the anchor client
+        cmd = f'start "Anchor Terminal" powershell -NoExit -Command "cd {script_dir}; python anchor.py"'
+
+        # Try to run the command to spawn a new window (non-blocking)
+        subprocess.Popen(cmd, shell=True)
+
+        return {"status": "spawned", "message": "Anchor terminal launched in new PowerShell window"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+
+
+# --- MODEL DOWNLOAD ENDPOINTS ---
+# Track model download status
+model_download_status = {}
+
+@app.post("/v1/models/pull")
+async def pull_model(request: Request):
+    """Download a model from HuggingFace to local storage"""
+    try:
+        body = await request.json()
+        model_id = body.get("model_id")
+        model_url = body.get("url")
+
+        if not model_id:
+            return JSONResponse(status_code=400, content={"error": "model_id is required"})
+
+        print(f"📥 DOWNLOAD: Requested to pull model {model_id}")
+
+        # Check if download is already in progress
+        if model_id in model_download_status:
+            if model_download_status[model_id]["status"] == "downloading":
+                return JSONResponse(status_code=409, content={"error": "Download already in progress"})
+
+        # For now, return a simulated response since full implementation would require complex download logic
+        return {
+            "status": "simulated",
+            "model_id": model_id,
+            "message": "Model download simulated - check if model exists locally"
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/v1/models/pull/status")
+async def get_pull_status(request: Request):
+    """Get the status of a model download"""
+    model_id = request.query_params.get("id")
+
+    if not model_id:
+        return JSONResponse(status_code=400, content={"error": "id parameter is required"})
+
+    # Return simulated status for now
+    return {
+        "status": "done",  # Simulated as completed
+        "progress": "100%",
+        "file": "Download completed (simulated)"
+    }
+
+
+# --- GPU MANAGEMENT ENDPOINTS ---
+# Track GPU state
+gpu_state = {
+    "locked": False,
+    "owner": None,
+    "queue_depth": 0,
+    "queued": [],
+    "hasPendingLoad": False,
+    "activeLoaders": []
+}
+
+@app.post("/v1/gpu/lock")
+async def gpu_lock(request: Request):
+    """Acquire GPU lock for model loading"""
+    try:
+        body = await request.json()
+        agent_id = body.get("id", "unknown")
+
+        # For now, just return a token to simulate lock acquisition
+        gpu_state["locked"] = True
+        gpu_state["owner"] = agent_id
+        gpu_state["queue_depth"] = 0  # Simplified
+
+        return {"status": "acquired", "token": f"token_{agent_id}_{time.time()}"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/v1/gpu/unlock")
+async def gpu_unlock(request: Request):
+    """Release GPU lock"""
+    try:
+        body = await request.json()
+        agent_id = body.get("id", "unknown")
+
+        # Release the lock
+        gpu_state["locked"] = False
+        gpu_state["owner"] = None
+
+        return {"status": "released"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.get("/v1/gpu/status")
+async def gpu_status(request: Request):
+    """Get GPU status"""
+    return {
+        "locked": gpu_state["locked"],
+        "owner": gpu_state["owner"],
+        "queue_depth": gpu_state["queue_depth"],
+        "queued": gpu_state["queued"],
+        "hasPendingLoad": gpu_state["hasPendingLoad"],
+        "activeLoaders": gpu_state["activeLoaders"]
+    }
+
+
+@app.post("/v1/gpu/reset")
+async def gpu_reset(request: Request):
+    """Reset GPU state"""
+    try:
+        gpu_state["locked"] = False
+        gpu_state["owner"] = None
+        gpu_state["queue_depth"] = 0
+        gpu_state["queued"] = []
+
+        return {"status": "reset"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/v1/gpu/force-release-all")
+async def gpu_force_release_all(request: Request):
+    """Force release all GPU locks"""
+    try:
+        gpu_state["locked"] = False
+        gpu_state["owner"] = None
+        gpu_state["queue_depth"] = 0
+        gpu_state["queued"] = []
+        gpu_state["hasPendingLoad"] = False
+        gpu_state["activeLoaders"] = []
+
+        return {"status": "all_released"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 # --- WEBSOCKETS (The Nervous System) ---
 @app.websocket("/ws/chat")

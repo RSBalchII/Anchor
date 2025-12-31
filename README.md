@@ -38,9 +38,9 @@ graph TD
 ```
 
 ### 2. Core Components
-*   **Brain**: `model-server-chat.html` - Runs the Graph-R1 Reasoning Loop. Now uses **Hybrid Search** (Vector + Lexical) and supports SOTA models (Qwen 3, Gemma 3).
+*   **Brain**: `chat.html` - Runs the Graph-R1 Reasoning Loop. Now uses **Hybrid Search** (Vector + BM25 FTS) and supports SOTA models (Qwen 3, Gemma 3).
 *   **Memory**: `CozoDB (WASM)` - Stores relations (`*memory`) and vectors. Persists to browser IndexedDB.
-*   **Stomach**: `sovereign-db-builder.html` - Ingests files into the graph. Now "Multisensory-Ready" (Phase A): accepts images/audio as references.
+*   **Stomach**: `db_builder.html` - Ingests files into the graph. Now "Multisensory-Ready" (Phase A): accepts images/audio as references.
 
 ---
 
@@ -67,8 +67,8 @@ The system includes a comprehensive hot reload mechanism for GPU management and 
 - `tools/webgpu_bridge.py` - Backend bridge logic
 - `tools/modules/anchor.js` - Frontend GPU controller
 - `tools/model-server-chat.html` - Main console interface
-- `tools/root-mic.html` - Voice input interface
-- `tools/root-dreamer.html` - Background processing
+- `tools/anchor-mic.html` - Voice input interface
+- `tools/memory-builder.html` - Background processing
 
 ### Benefits
 - **Faster Development**: Changes take effect immediately
