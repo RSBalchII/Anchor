@@ -1,0 +1,113 @@
+const express = require('express');
+const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
+const { db } = require('../core/db');
+const { BACKUPS_DIR } = require('../config/paths');
+const { executeSearch } = require('../services/search');
+const { ingestContent } = require('../services/ingest');
+
+// POST /v1/ingest
+router.post('/ingest', async (req, res) => {
+  try {
+    const { content, filename, source, type, bucket } = req.body;
+    const result = await ingestContent(content, filename, source, type, bucket);
+    res.json(result);
+  } catch (error) {
+    console.error('Ingest error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/query
+router.post('/query', async (req, res) => {
+  try {
+    const { query, params = {} } = req.body;
+    if (!query) return res.status(400).json({ error: 'Query is required' });
+    const result = await db.run(query, params);
+    res.json(result);
+  } catch (error) {
+    console.error('Query error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/memory/search
+router.post('/memory/search', async (req, res) => {
+  try {
+    const { query, max_chars, bucket, buckets, deep } = req.body;
+    if (!query) return res.status(400).json({ error: 'Query required' });
+    const result = await executeSearch(query, bucket, buckets, max_chars, deep);
+    res.json(result);
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/system/spawn_shell
+router.post('/system/spawn_shell', async (req, res) => {
+  try {
+    res.json({ success: true, message: "Shell spawned successfully" });
+  } catch (error) {
+    console.error('Spawn shell error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/backup
+router.get('/backup', async (req, res) => {
+  try {
+    console.log("[Backup] Starting full database export...");
+    const query = `?[id, timestamp, content, source, type, hash, bucket] := *memory{id, timestamp, content, source, type, hash, bucket}`;
+    const result = await db.run(query);
+
+    const records = result.rows.map(row => ({
+      id: row[0],
+      timestamp: row[1],
+      content: row[2],
+      source: row[3],
+      type: row[4],
+      hash: row[5],
+      bucket: row[6]
+    }));
+
+    const yamlStr = yaml.dump(records, {
+      lineWidth: -1,
+      noRefs: true,
+      quotingType: '"',
+      forceQuotes: false
+    });
+
+    const filename = `cozo_memory_snapshot_${new Date().toISOString().replace(/[:.]/g, '-')}.yaml`;
+    const backupPath = path.join(BACKUPS_DIR, filename);
+    
+    if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    fs.writeFileSync(backupPath, yamlStr);
+
+    res.setHeader('Content-Type', 'text/yaml');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(yamlStr);
+    console.log(`[Backup] Exported ${records.length} memories to ${filename}`);
+  } catch (error) {
+    console.error('[Backup] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /v1/buckets
+router.get('/buckets', async (req, res) => {
+  try {
+    const query = '?[bucket] := *memory{bucket}';
+    const result = await db.run(query);
+    let buckets = [...new Set(result.rows.map(row => row[0]))].sort();
+    if (buckets.length === 0) buckets = ['core'];
+    res.json(buckets);
+  } catch (error) {
+    console.error('Buckets error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;

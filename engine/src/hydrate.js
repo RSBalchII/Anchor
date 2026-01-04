@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const crypto = require('crypto');
-const { CozoDb } = require('cozo-node');
+const { CozoDb } = require('./core/cozo_loader');
 
 // Helper to calculate hash
 function getHash(content) {
@@ -73,12 +73,15 @@ async function hydrate(db, filePath) {
     }
 }
 
+const isPkg = typeof process.pkg !== 'undefined';
+const basePath = isPkg ? path.dirname(process.execPath) : path.join(__dirname, '..', '..');
+const DB_PATH = path.join(basePath, 'context.db');
+
 module.exports = { hydrate };
 
 if (require.main === module) {
     const targetFile = process.argv[2];
-    const dbPath = path.join(__dirname, '..', 'context.db');
-    const db = new CozoDb('rocksdb', dbPath);
+    const db = new CozoDb('rocksdb', DB_PATH);
     if (!targetFile) { console.log("Usage: node src/hydrate.js <snapshot.yaml>"); process.exit(1); }
     hydrate(db, targetFile);
 }

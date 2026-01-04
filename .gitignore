@@ -11,6 +11,7 @@ backups/*.json
 context/*
 !context/.gitkeep
 codebase/
+dist/
 
 # Logs
 logs/*

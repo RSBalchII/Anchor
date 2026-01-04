@@ -3,12 +3,16 @@ const path = require('path');
 const glob = require('glob');
 const yaml = require('js-yaml');
 
+const isPkg = typeof process.pkg !== 'undefined';
+const basePath = isPkg ? path.dirname(process.execPath) : path.join(__dirname, '..', '..');
+const CONTEXT_DIR = path.join(basePath, 'context');
+
 // Migration script to consolidate legacy session files
 async function migrateHistory() {
   console.log('Starting legacy session migration...');
 
   // Find all session files
-  const sessionsDir = path.join(__dirname, '..', '..', 'context', 'Coding-Notes', 'Notebook', 'history', 'important-context', 'sessions', 'raws');
+  const sessionsDir = path.join(CONTEXT_DIR, 'Coding-Notes', 'Notebook', 'history', 'important-context', 'sessions', 'raws');
   const pattern = path.join(sessionsDir, 'sessions_part_*.json');
 
   // Use glob to find all matching files
@@ -17,7 +21,7 @@ async function migrateHistory() {
   if (sessionFiles.length === 0) {
     console.log('No session files found in the expected location.');
     // Try alternative path
-    const altSessionsDir = path.join(__dirname, '..', '..', 'context', 'Coding-Notes', 'Notebook', 'history', 'important-context', 'sessions');
+    const altSessionsDir = path.join(CONTEXT_DIR, 'Coding-Notes', 'Notebook', 'history', 'important-context', 'sessions');
     const altPattern = path.join(altSessionsDir, 'sessions_part_*.json');
     const altSessionFiles = glob.sync(altPattern);
 
@@ -78,7 +82,7 @@ function processSessionFiles(sessionFiles) {
   console.log(`Merged ${allSessions.length} total sessions`);
 
   // Save to YAML file
-  const outputDir = path.join(__dirname, '..', '..', 'context');
+  const outputDir = CONTEXT_DIR;
   const outputFile = path.join(outputDir, 'full_history.yaml');
 
   // Custom YAML representer for multiline strings

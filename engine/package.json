@@ -3,11 +3,22 @@
   "version": "3.0.0",
   "description": "Headless Context Engine & Knowledge Graph",
   "main": "src/index.js",
+  "bin": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "migrate": "node src/migrate_history.js",
     "read-all": "node src/read_all.js",
-    "hydrate": "node src/hydrate.js"
+    "hydrate": "node src/hydrate.js",
+    "build": "pkg ."
+  },
+  "pkg": {
+    "assets": [],
+    "targets": [
+      "node18-win-x64",
+      "node18-macos-x64",
+      "node18-linux-x64"
+    ],
+    "outputPath": "dist"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
@@ -16,5 +27,8 @@
     "cozo-node": "^0.7.5",
     "express": "^4.18.2",
     "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
   }
 }
