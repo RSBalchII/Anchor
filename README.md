@@ -12,7 +12,7 @@ Just you, Node.js, and your infinite context.
 1.  **Download** this repository.
 2.  **Install** Node.js dependencies: `cd engine && npm install`
 3.  **Inject Context**: Drop any `.md`, `.txt`, or `.yaml` files into the `context/` directory.
-4.  **Launch** the unified system: `start_engine.bat`
+4.  **Launch** the unified system: `start_engine.bat` (Windows) or `./start_engine.sh` (macOS/Linux)
 5.  **Search**: Access the dashboard at `http://localhost:3000` to query your memories.
 
 *That's it. You are running a headless context engine with persistent Graph Memory.*
@@ -24,7 +24,7 @@ Just you, Node.js, and your infinite context.
 - All services run in detached mode with logging to the `logs/` directory
 - Never run long-running processes in attached mode
 - Check log files in `logs/` directory to monitor system status
-- Use `start_engine.bat` or `start_engine.ps1` to start the system properly
+- Use `start_engine.bat`, `start_engine.ps1`, or `start_engine.sh` to start the system properly
 
 ---
 
@@ -77,7 +77,8 @@ The system now features the unified Node.js monolith architecture for simplified
 
 ### Getting Started with Node.js Monolith
 1. Install dependencies: `cd engine && npm install`
-2. Start the unified system: `start_engine.bat` (or `start_engine.ps1`)
+2. Start the unified system: `start_engine.bat` (Windows) or `./start_engine.sh` (macOS/Linux)
+   *Note: On macOS/Linux, you may need to run `chmod +x start_engine.sh` first.*
 3. Access the health check: `http://localhost:3000/health`
 4. Use the API endpoints for ingestion and querying
 
