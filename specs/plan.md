@@ -31,7 +31,7 @@
 - [x] **Vision Removal**: Remove brittle Vision/Ollama dependencies.
 - [x] **Watchdog Implementation**: Create passive text ingestion service.
 - [x] **Debounce & Hash Check**: Prevent duplicate file ingestion.
-- [x] **Auto-Resurrection**: Enhance browser process management.
+- [x] **[Archived] Auto-Resurrection**: Enhance browser process management.
 - [x] **Streaming CLI**: Improve terminal UX with streaming responses.
 
 ## Phase 5: Context Expansion & Persistence (Completed)
@@ -48,8 +48,8 @@
 - [x] **Timestamped Entries**: Format messages with timestamps for better tracking.
 
 ## Phase 7: Model Loading Reliability (Completed)
-- [x] **URL Construction Fix**: Implemented `/models/{model}/resolve/main/{file}` redirect for MLC-LLM compatibility.
-- [x] **File Renaming**: Standardized component names (`anchor-mic.html`, `memory-builder.html`, `db_builder.html`).
+- [x] **[Archived] URL Construction Fix**: Implemented `/models/{model}/resolve/main/{file}` redirect for MLC-LLM compatibility.
+- [x] **File Standardizing**: Standardized component names (`anchor-mic.html`, `memory-builder.html`, `db_builder.html`).
 - [x] **Server Stability**: Fixed hanging issues with problematic path parameter syntax.
 - [x] **Endpoint Completeness**: Verified all documented endpoints are accessible.
 
@@ -60,22 +60,22 @@
 - [x] **Stemming Support**: Enabled English stemming for improved word variation matching.
 
 ## Phase 6: GPU Resource Management (Completed)
-- [x] **GPU Queuing System**: Implemented automatic queuing for GPU resource requests to prevent conflicts
-- [x] **Resource Status Management**: Added GPU lock status tracking with owner identification
-- [x] **503 Error Resolution**: Fixed "Service Unavailable" errors by implementing proper resource queuing
-- [x] **Endpoint Integration**: Added `/v1/gpu/lock`, `/v1/gpu/unlock`, `/v1/gpu/status` endpoints
-- [x] **Log Integration**: Added GPU resource management to centralized logging system
+- [x] **[Archived] GPU Queuing System**: Implemented automatic queuing for GPU resource requests to prevent conflicts
+- [x] **[Archived] Resource Status Management**: Added GPU lock status tracking with owner identification
+- [x] **[Archived] 503 Error Resolution**: Fixed "Service Unavailable" errors by implementing proper resource queuing
+- [x] **[Archived] Endpoint Integration**: Added `/v1/gpu/lock`, `/v1/gpu/unlock`, `/v1/gpu/status` endpoints
+- [x] **[Archived] Log Integration**: Added GPU resource management to centralized logging system
 
 ## Phase 7: Async/Await Best Practices (Completed)
-- [x] **Coroutine Fixes**: Resolved "coroutine was never awaited" warnings in webgpu_bridge.py
-- [x] **Event Loop Integration**: Properly integrated async functions with FastAPI's event loop
+- [x] **[Archived] Coroutine Fixes**: Resolved "coroutine was never awaited" warnings in webgpu_bridge.py
+- [x] **[Archived] Event Loop Integration**: Properly integrated async functions with FastAPI's event loop
 - [x] **Startup Sequence**: Ensured logging system initializes properly with application lifecycle
 - [x] **Resource Management**: Fixed resource cleanup in WebSocket handlers to prevent leaks
 - [x] **Error Handling**: Enhanced async error handling with proper cleanup procedures
 
 ## Phase 8: Browser-Based Control Center (Completed)
 - [x] **UI Integration**: Implemented browser-based sidecar with retrieval and vision tabs
-- [x] **Vision Engine**: Created Python-powered VLM integration for image analysis
+- [x] **[Archived] Vision Engine**: Created Python-powered VLM integration for image analysis
 - [x] **Endpoint Expansion**: Added vision ingestion and enhanced logging endpoints
 - [x] **File Logging**: Implemented persistent file-based logging with truncation
 - [x] **UI Serving**: Extended bridge to serve HTML interfaces for unified workflow
@@ -83,11 +83,17 @@
 ## Phase 9: Context Ingestion Pipeline Fixes (Completed)
 - [x] **Field Name Alignment**: Fixed mismatch between watchdog payload (`filetype`) and endpoint expectation (`file_type`)
 - [x] **Source Identification**: Updated watchdog to send proper source identifiers instead of "unknown"
-- [x] **Ghost Engine Update**: Fixed handleIngest function to use correct field names (`msg.file_type`)
+- [x] **[Archived] Ghost Engine Update**: Fixed handleIngest function to use correct field names (`msg.file_type`)
 - [x] **Error Handling**: Enhanced error reporting in watchdog for better debugging
 - [x] **Database Initialization**: Verified CozoDB schema creation and memory table initialization
 - [x] **Ingestion Verification**: Confirmed context files are properly ingested and searchable
 
-## Phase 10: Federation
+## Phase 10: Production Polish
+- [ ] **UI/UX Overhaul**: Implement "Flight Recorder" aesthetic for the dashboard.
+- [ ] **Android Compatibility**: Ensure the Node.js monolith runs efficiently in Termux.
+- [ ] **Clean Install Script**: Create a one-click setup for new users.
+- [ ] **Elastic Window Tuning**: Optimize snippeting for 1M token context windows.
+
+## Phase 11: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).
 - [ ] **Local-First Cloud**: Optional encrypted backup.

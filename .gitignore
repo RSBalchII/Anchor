@@ -1,24 +1,20 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-.qwen
-*.json
-*.yaml
-*.txt
-node_modules
+# Node
+node_modules/
+npm-debug.log
 
-# Virtual environments
-.venv
+# Database & Storage (User Data)
+engine/context.db/
+backups/*.yaml
+backups/*.json
 
-# Large model files
-models/
+# Context (User Data) - Keep folder, ignore content
+context/*
+!context/.gitkeep
 
-backend/archive/db/
+# Logs
+logs/*
+!logs/.gitkeep
 
-*context/
-/archive/
-/browser_data/
+# System
+.DS_Store
+Thumbs.db

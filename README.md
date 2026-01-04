@@ -11,8 +11,9 @@ Just you, Node.js, and your infinite context.
 
 1.  **Download** this repository.
 2.  **Install** Node.js dependencies: `cd engine && npm install`
-3.  **Launch** the unified system using the logging protocol: `start_engine.bat`
-4.  **Access** the API at `http://localhost:3000`
+3.  **Inject Context**: Drop any `.md`, `.txt`, or `.yaml` files into the `context/` directory.
+4.  **Launch** the unified system: `start_engine.bat`
+5.  **Search**: Access the dashboard at `http://localhost:3000` to query your memories.
 
 *That's it. You are running a headless context engine with persistent Graph Memory.*
 
@@ -81,16 +82,34 @@ The system now features the unified Node.js monolith architecture for simplified
 4. Use the API endpoints for ingestion and querying
 
 ### API Endpoints
-*   `POST /v1/ingest` - Content ingestion endpoint
-*   `POST /v1/query` - CozoDB query execution endpoint
-*   `GET /health` - Service health verification endpoint
+*   `POST /v1/memory/search` - **Cognitive Search**: Returns "Elastic Window" snippets grouped by file.
+*   `POST /v1/ingest` - Content ingestion endpoint (manual override).
+*   `POST /v1/query` - Raw CozoDB query execution endpoint.
+*   `GET /health` - Service health verification endpoint.
 
-### Migration Benefits
-* **Eliminated Browser Dependencies**: No more fragile headless browser architecture
-* **Reduced Resource Consumption**: Lower memory and CPU usage
-* **Improved Platform Compatibility**: Works on Termux/Linux environments
-* **Enhanced Stability**: More reliable operation without browser quirks
-* **Simplified Deployment**: Single Node.js process instead of complex browser bridge
+---
+
+## 🧠 Cognitive Retrieval (Elastic Window)
+
+The engine uses a sophisticated **"Elastic Window"** strategy to solve the "Keyword Saturation" problem (where large files flood the LLM context).
+
+### 1. BM25 Full-Text Search
+When you query the engine, it first performs a **BM25 Full-Text Search** across the entire database to find the most relevant documents.
+
+### 2. Elastic Snippeting
+Instead of returning the whole file, the engine:
+- **Scans** for every occurrence of your keywords.
+- **Allocates** a character budget (default 5000) across all hits.
+- **Expands** a "window" of context (min 300 chars) around each hit to capture full thoughts.
+- **Merges** overlapping or nearby snippets to ensure coherence.
+
+### 3. Grouped Output
+Results are returned as a **Context Digest**:
+- **Source Header**: Printed once per file with a relevance score.
+- **Snippets**: All relevant sections from that file listed below the header.
+- **Separators**: Clear `---` markers between different sources.
+
+This ensures the LLM receives **high-density, relevant paragraphs** instead of "sentence soup" or massive, irrelevant file chunks.
 
 ---
 

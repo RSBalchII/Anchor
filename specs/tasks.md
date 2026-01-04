@@ -48,6 +48,14 @@
 ### Phase 8: Session Recorder & Text-File Source of Truth (Completed)
 - [x] **Daily Session Files**: Create `chat_YYYY-MM-DD.md` files for each day's conversations
 - [x] **Text-File Source of Truth**: Implement "Database is Cache" philosophy
+
+### Phase 9: Node.js Monolith & Snapshot Portability (Completed)
+- [x] **Migration**: Move from Python/Browser Bridge to Node.js Monolith (Standard 034).
+- [x] **FTS Optimization**: Implement native CozoDB BM25 search.
+- [x] **Operational Safety**: Implement detached execution and logging protocols (Standard 035/036).
+- [x] **Snapshot Portability**: Create "Eject" (Backup) and "Hydrate" (Restore) workflow (Standard 037).
+- [x] **Search Hardening**: Implement result truncation for large context files.
+
 - [x] **Cross-Machine Sync**: Enable file sync via Dropbox/Git for multi-device access
 - [x] **Infinite Loop**: Create feedback loop: Chat -> File -> Ingestion -> Memory -> Next Chat
 - [x] **Timestamped Entries**: Format messages with timestamps for better tracking
