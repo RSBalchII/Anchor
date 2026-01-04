@@ -113,7 +113,35 @@ This ensures the LLM receives **high-density, relevant paragraphs** instead of "
 
 ---
 
-## 🔄 Context Collection & Migration
+## � Portability & Snapshots (The "Ship" Protocol)
+
+The Context Engine is designed for **Zero-Cloud Portability**. You can move your entire cognitive history between machines without a database server.
+
+### 1. Exporting Your Mind
+- **UI Export**: Click the **"Export Snapshot"** button in the dashboard.
+- **API Export**: `GET /v1/backup` returns a portable YAML file containing every memory, hash, and bucket.
+- **Storage**: Snapshots are saved to the `backups/` directory as `cozo_memory_snapshot_YYYY-MM-DD.yaml`.
+- **Git Policy**: The `backups/` folder is ignored by Git to keep your repository clean, but these files are your primary "Cognitive Backups."
+
+### 2. Moving to a New Machine
+To move your context to a new device:
+1.  **Copy** your latest `.yaml` snapshot to the new machine.
+2.  **Install** Node.js and run `npm install` in the `engine/` folder.
+3.  **Hydrate**: Run the hydration command:
+    ```bash
+    cd engine
+    node src/hydrate.js ../backups/your_snapshot.yaml
+    ```
+4.  **Launch**: Run `start_engine.bat`. Your entire history is now live on the new machine.
+
+### 3. Why Snapshots?
+- **Human Readable**: You can open the `.yaml` file in any text editor to see your data.
+- **Deduplication**: The engine uses MD5 hashing to ensure that if you re-ingest the same file, it doesn't create duplicates.
+- **Bucket Preservation**: Your custom partitions (e.g., "research", "coding") are preserved across migrations.
+
+---
+
+## �🔄 Context Collection & Migration
 
 The system now includes comprehensive context collection and legacy migration:
 

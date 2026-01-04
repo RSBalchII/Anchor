@@ -48,98 +48,92 @@ function shouldIgnore(filePath) {
     return false;
 }
 
-// Function to aggregate all file contents from context directory
+// Function to aggregate all file contents from the project root
 function createFullCorpusRecursive() {
-    const contextDir = path.join(__dirname, '..', '..', 'context');
-    console.log(`Scanning context directory: ${contextDir}`);
+    const rootDir = __dirname;
+    const contextDir = path.join(rootDir, 'context');
+    console.log(`Scanning project root: ${rootDir}`);
 
     if (!fs.existsSync(contextDir)) {
         console.log('Context directory does not exist, creating it...');
         fs.mkdirSync(contextDir, { recursive: true });
-        return;
     }
 
     const aggregatedData = {
-        project_structure: contextDir,
+        project_structure: rootDir,
         files: []
     };
 
     let totalTokens = 0;
-    const tokenLimit = 200000; // 200k tokens
+    const tokenLimit = 400000; // Increased to 400k tokens for full codebase
 
-    // Walk through all files in the context directory
+    // Walk through all files in the project
     function walkDirectory(currentPath) {
         let items;
         try {
             items = fs.readdirSync(currentPath);
         } catch (e) {
-            // If we can't read the directory, skip it
-            console.error(`Cannot read directory ${currentPath}: ${e.message}`);
             return;
         }
 
         for (const item of items) {
             const itemPath = path.join(currentPath, item);
+            const relativePath = path.relative(rootDir, itemPath);
 
             let stat;
             try {
                 stat = fs.statSync(itemPath);
             } catch (e) {
-                // If we can't access the file/directory (e.g., broken symlink), skip it
                 continue;
             }
 
             if (stat.isDirectory()) {
                 // Skip specific directories
-                if (item === '.git' || item === '__pycache__' || item === '.pytest_cache' ||
-                    item === '.vscode' || item === 'node_modules' ||
-                    item === '.venv' || item === 'venv' || item === 'archive') {
+                const normalizedItem = item.toLowerCase();
+                if (normalizedItem === '.git' || normalizedItem === 'node_modules' || normalizedItem === 'archive' || 
+                    normalizedItem === 'backups' || normalizedItem === 'logs' || normalizedItem === 'context' ||
+                    normalizedItem === '.vscode' || normalizedItem === 'context.db' || 
+                    normalizedItem === '__pycache__' || normalizedItem === 'dist' || normalizedItem === 'build') {
                     continue;
                 }
 
                 walkDirectory(itemPath);
             } else {
                 // Check if file should be ignored
-                if (shouldIgnore(itemPath)) {
+                const normalizedItem = item.toLowerCase();
+                if (shouldIgnore(itemPath) || normalizedItem === 'combined_context.yaml' || 
+                    normalizedItem === 'package-lock.json' || normalizedItem.endsWith('.sst') || 
+                    normalizedItem.endsWith('.ldb') || normalizedItem === 'manifest' || 
+                    normalizedItem.startsWith('manifest-')) {
                     continue;
                 }
 
                 try {
-                    // Read file as text
                     const content = fs.readFileSync(itemPath, 'utf-8');
-
-                    // Count tokens in this file
                     const fileTokens = countTokens(content);
 
-                    // Check if adding this file would exceed the token limit
                     if (totalTokens + fileTokens > tokenLimit) {
-                        console.log(`Token limit reached. Skipping: ${itemPath}`);
-                        break;
+                        console.log(`Token limit reached. Skipping: ${relativePath}`);
+                        continue;
                     }
 
-                    // Add file data to aggregated content
-                    const relativePath = path.relative(contextDir, itemPath);
                     const fileData = {
                         path: relativePath,
                         content: content,
-                        size: content.length,
                         tokens: fileTokens
                     };
 
                     aggregatedData.files.push(fileData);
                     totalTokens += fileTokens;
-
                     console.log(`Processed: ${relativePath} (${fileTokens} tokens)`);
-
                 } catch (e) {
-                    // If it's not a text file or there's an error, skip it
-                    console.log(`Error reading file ${itemPath}: ${e.message}`);
+                    // Skip non-text files
                 }
             }
         }
     }
 
-    walkDirectory(contextDir);
+    walkDirectory(rootDir);
 
     aggregatedData.metadata = {
         total_files: aggregatedData.files.length,
@@ -166,6 +160,6 @@ module.exports = { createFullCorpusRecursive };
 
 // Run if this file is executed directly
 if (require.main === module) {
-    console.log('Starting context aggregation from context directory...');
+    console.log('Starting full project aggregation...');
     createFullCorpusRecursive();
 }
