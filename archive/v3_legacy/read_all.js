@@ -1,24 +1,13 @@
-#!/usr/bin/env node
-
 /**
- * Context Aggregation Tool for ECE_Core
+ * Context Aggregation Tool for ECE_Core Engine
  *
- * This script recursively scans all directories and files in the project,
- * aggregates their content into a single YAML file with a 200k token limit,
- * and omits files/directories specified in .gitignore.
+ * This script recursively scans all text files in the context directory,
+ * aggregates their content into a single YAML file with a 200k token limit.
  */
 
 const fs = require('fs');
 const path = require('path');
-
-// Try to load js-yaml, with fallback error handling
-let yaml;
-try {
-    yaml = require('js-yaml');
-} catch (e) {
-    console.error('js-yaml not found. Please install it with: npm install js-yaml');
-    process.exit(1);
-}
+const yaml = require('js-yaml');
 
 // Simple token counting function
 function countTokens(text) {
@@ -33,45 +22,59 @@ function shouldIgnore(filePath) {
     const fileName = path.basename(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
-    // Always ignore certain directories
-    const pathParts = relativePath.split(path.sep);
-    const ignoreDirs = new Set(['.git', '__pycache__', '.pytest_cache', '.vscode', 'node_modules', '.venv', 'venv', 'archive', 'context']);
-    if (pathParts.some(part => ignoreDirs.has(part))) {
+    // Always ignore certain files
+    const ignoreFiles = ['.DS_Store', 'Thumbs.db'];
+    if (ignoreFiles.includes(fileName) || fileName.endsWith('.log') || fileName.endsWith('.tmp') || fileName.endsWith('.temp')) {
         return true;
     }
 
-    // Always ignore certain files
-    const ignoreFiles = ['.DS_Store', 'Thumbs.db'];
-    if (ignoreFiles.includes(fileName) || fileName.endsWith('.log') || fileName.endsWith('.tmp') || fileName.endsWith('.txt') || fileName.endsWith('.yaml')   || fileName.endsWith('.temp')) {
-        return true;w
+    // Skip binary files based on extension
+    const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.exe', '.bin', '.zip', '.tar', '.gz', '.rar', '.7z', '.pdf'];
+    if (binaryExts.includes(ext)) {
+        return true;
     }
 
-    // Skip binary files based on extension
-    const binaryExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.exe', '.bin', '.zip', '.tar', '.gz', '.rar', '.7z'];
-    if (binaryExts.includes(ext)) {
+    // Skip large files to avoid memory issues
+    try {
+        const stats = fs.statSync(filePath);
+        if (stats.size > 10 * 1024 * 1024) { // 10MB limit
+            return true;
+        }
+    } catch (e) {
+        // If we can't stat the file, skip it
         return true;
     }
 
     return false;
 }
 
-// Function to aggregate all file contents
-function aggregateContent(rootPath) {
+// Function to aggregate all file contents from context directory
+function createFullCorpusRecursive() {
+    const contextDir = path.join(__dirname, '..', '..', 'context');
+    console.log(`Scanning context directory: ${contextDir}`);
+
+    if (!fs.existsSync(contextDir)) {
+        console.log('Context directory does not exist, creating it...');
+        fs.mkdirSync(contextDir, { recursive: true });
+        return;
+    }
+
     const aggregatedData = {
-        project_structure: rootPath,
+        project_structure: contextDir,
         files: []
     };
 
     let totalTokens = 0;
     const tokenLimit = 200000; // 200k tokens
 
-    // Walk through all files in the directory
+    // Walk through all files in the context directory
     function walkDirectory(currentPath) {
         let items;
         try {
             items = fs.readdirSync(currentPath);
         } catch (e) {
             // If we can't read the directory, skip it
+            console.error(`Cannot read directory ${currentPath}: ${e.message}`);
             return;
         }
 
@@ -115,7 +118,7 @@ function aggregateContent(rootPath) {
                     }
 
                     // Add file data to aggregated content
-                    const relativePath = path.relative(rootPath, itemPath);
+                    const relativePath = path.relative(contextDir, itemPath);
                     const fileData = {
                         path: relativePath,
                         content: content,
@@ -126,40 +129,28 @@ function aggregateContent(rootPath) {
                     aggregatedData.files.push(fileData);
                     totalTokens += fileTokens;
 
+                    console.log(`Processed: ${relativePath} (${fileTokens} tokens)`);
+
                 } catch (e) {
                     // If it's not a text file or there's an error, skip it
-                    // Only log if it's not a binary file error
-                    if (e.code !== 'EISDIR' && !e.message.includes('Invalid character') && !e.message.includes('Unexpected')) {
-                        // console.log(`Error reading file ${itemPath}: ${e.message}`);
-                    }
+                    console.log(`Error reading file ${itemPath}: ${e.message}`);
                 }
             }
         }
     }
 
-    walkDirectory(rootPath);
+    walkDirectory(contextDir);
 
     aggregatedData.metadata = {
         total_files: aggregatedData.files.length,
         total_tokens: totalTokens,
         token_limit: tokenLimit,
-        token_limit_reached: totalTokens >= tokenLimit
+        token_limit_reached: totalTokens >= tokenLimit,
+        timestamp: new Date().toISOString()
     };
 
-    return aggregatedData;
-}
-
-// Main function
-function main() {
-    const rootPath = process.cwd();
-
-    console.log("Starting context aggregation...");
-    console.log(`Root path: ${rootPath}`);
-
-    const aggregatedData = aggregateContent(rootPath);
-
-    // Write to YAML file
-    const outputFile = path.join(rootPath, "combined_context.yaml");
+    // Write to YAML file in context directory
+    const outputFile = path.join(contextDir, "combined_context.yaml");
     const yamlContent = yaml.dump(aggregatedData, { lineWidth: -1 });
     fs.writeFileSync(outputFile, yamlContent);
 
@@ -167,9 +158,14 @@ function main() {
     console.log(`Output file: ${outputFile}`);
     console.log(`Total files processed: ${aggregatedData.metadata.total_files}`);
     console.log(`Total tokens: ${aggregatedData.metadata.total_tokens}`);
-    console.log(`Token limit: ${aggregatedData.metadata.token_limit}`);
-    console.log(`Token limit reached: ${aggregatedData.metadata.token_limit_reached}`);
+
+    return aggregatedData;
 }
 
-// Run the main function
-main();
+module.exports = { createFullCorpusRecursive };
+
+// Run if this file is executed directly
+if (require.main === module) {
+    console.log('Starting context aggregation from context directory...');
+    createFullCorpusRecursive();
+}
