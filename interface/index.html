@@ -154,6 +154,9 @@
         <button onclick="downloadBackup()" style="background: #10b981; color: white; margin-top: 10px; border: 1px solid #059669">
             💾 Eject Memory (Backup)
         </button>
+        <button onclick="triggerDream()" style="background: #8b5cf6; color: white; margin-top: 10px; border: 1px solid #7c3aed">
+            🌙 Trigger Dreamer (Self-Organize)
+        </button>
 
         <div style="margin-top: 20px; border-top: 1px solid #334155; padding-top: 20px;">
             <label>📥 Ingest New Memory</label>
@@ -339,6 +342,31 @@
 
             } catch (e) {
                 alert("Export Error: " + e.message);
+                btn.innerText = "❌ Failed";
+                setTimeout(() => btn.innerText = originalText, 2000);
+            }
+        }
+
+        async function triggerDream() {
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "🌙 Dreaming...";
+            const out = document.getElementById('output');
+            out.value = "🌙 The Dreamer is analyzing and self-organizing your memories...\nThis may take a moment depending on the number of untagged files.";
+
+            try {
+                const res = await fetch('http://localhost:3000/v1/dream', { method: 'POST' });
+                const data = await res.json();
+                
+                out.value = `🌙 Dream Cycle Complete!\n\nAnalyzed: ${data.analyzed}\nUpdated: ${data.updated}\nTotal Unique Tags: ${data.total_tags}`;
+                
+                btn.innerText = "✅ Organized!";
+                setTimeout(() => btn.innerText = originalText, 2000);
+                
+                // Reload buckets to show new ones
+                loadBuckets();
+            } catch (e) {
+                alert("Dream Error: " + e.message);
                 btn.innerText = "❌ Failed";
                 setTimeout(() => btn.innerText = originalText, 2000);
             }

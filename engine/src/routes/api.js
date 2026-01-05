@@ -7,12 +7,15 @@ const { db } = require('../core/db');
 const { BACKUPS_DIR } = require('../config/paths');
 const { executeSearch } = require('../services/search');
 const { ingestContent } = require('../services/ingest');
+const { dream } = require('../services/dreamer');
+const inference = require('../services/inference');
 
 // POST /v1/ingest
 router.post('/ingest', async (req, res) => {
   try {
-    const { content, filename, source, type, bucket } = req.body;
-    const result = await ingestContent(content, filename, source, type, bucket);
+    const { content, filename, source, type, bucket, buckets } = req.body;
+    const targetBuckets = buckets || (bucket ? [bucket] : ['core']);
+    const result = await ingestContent(content, filename, source, type, targetBuckets);
     res.json(result);
   } catch (error) {
     console.error('Ingest error:', error);
@@ -56,11 +59,52 @@ router.post('/system/spawn_shell', async (req, res) => {
   }
 });
 
+// GET /v1/models
+router.get('/models', async (req, res) => {
+  try {
+    res.json(inference.listModels());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/inference/load
+router.post('/inference/load', async (req, res) => {
+  try {
+    const { model, options } = req.body;
+    const result = await inference.loadModel(model, options);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/chat/completions
+router.post('/chat/completions', async (req, res) => {
+  try {
+    const { messages, ...options } = req.body;
+    const response = await inference.chat(messages, options);
+    res.json({ choices: [{ message: { content: response } }] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /v1/dream
+router.post('/dream', async (req, res) => {
+  try {
+    const result = await dream();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET /v1/backup
 router.get('/backup', async (req, res) => {
   try {
     console.log("[Backup] Starting full database export...");
-    const query = `?[id, timestamp, content, source, type, hash, bucket] := *memory{id, timestamp, content, source, type, hash, bucket}`;
+    const query = `?[id, timestamp, content, source, type, hash, buckets] := *memory{id, timestamp, content, source, type, hash, buckets}`;
     const result = await db.run(query);
 
     const records = result.rows.map(row => ({
@@ -70,7 +114,7 @@ router.get('/backup', async (req, res) => {
       source: row[3],
       type: row[4],
       hash: row[5],
-      bucket: row[6]
+      buckets: row[6]
     }));
 
     const yamlStr = yaml.dump(records, {
@@ -99,9 +143,9 @@ router.get('/backup', async (req, res) => {
 // GET /v1/buckets
 router.get('/buckets', async (req, res) => {
   try {
-    const query = '?[bucket] := *memory{bucket}';
+    const query = '?[buckets] := *memory{buckets}';
     const result = await db.run(query);
-    let buckets = [...new Set(result.rows.map(row => row[0]))].sort();
+    let buckets = [...new Set(result.rows.flatMap(row => row[0]))].sort();
     if (buckets.length === 0) buckets = ['core'];
     res.json(buckets);
   } catch (error) {

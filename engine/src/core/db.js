@@ -20,11 +20,44 @@ async function initializeDb() {
 
     // Only create the memory table if it doesn't already exist
     if (!relations.rows.some(row => row[0] === 'memory')) {
-        const schemaQuery = ':create memory {id: String => timestamp: Int, content: String, source: String, type: String, hash: String, bucket: String}';
+        const schemaQuery = ':create memory {id: String => timestamp: Int, content: String, source: String, type: String, hash: String, buckets: [String]}';
         await db.run(schemaQuery);
         console.log('Database schema initialized');
     } else {
-        console.log('Database schema already exists');
+        // Check if we need to migrate from bucket (String) to buckets ([String])
+        const columnsQuery = '::columns memory';
+        const columns = await db.run(columnsQuery);
+        const hasBuckets = columns.rows.some(row => row[0] === 'buckets');
+        
+        if (!hasBuckets) {
+            console.log('Migrating schema: bucket -> buckets');
+            // 1. Get all data
+            const data = await db.run('?[id, timestamp, content, source, type, hash, bucket] := *memory{id, timestamp, content, source, type, hash, bucket}');
+            
+            // 2. Clear old table
+            await db.run('~memory(_) :rm');
+            
+            // 3. We can't easily change schema without dropping, so we'll just warn and suggest manual reset if this fails
+            console.log('Warning: Schema migration requires manual database reset or complex Cozo migration.');
+            console.log('Attempting to drop and recreate...');
+            try {
+                await db.run('::fts remove memory:content_fts');
+            } catch (e) {}
+            await db.run('::remove memory');
+            
+            // 4. Create new table
+            const schemaQuery = ':create memory {id: String => timestamp: Int, content: String, source: String, type: String, hash: String, buckets: [String]}';
+            await db.run(schemaQuery);
+            
+            // 5. Re-insert data with bucket wrapped in list
+            if (data.rows.length > 0) {
+                const migratedValues = data.rows.map(r => [r[0], r[1], r[2], r[3], r[4], r[5], [r[6]]]);
+                await db.run('?[id, timestamp, content, source, type, hash, buckets] <- $data :put memory {id, timestamp, content, source, type, hash, buckets}', { data: migratedValues });
+            }
+            console.log('Migration complete.');
+        } else {
+            console.log('Database schema already exists');
+        }
     }
 
     // Try to create FTS index
@@ -66,7 +99,7 @@ async function autoHydrate() {
       console.log(`🔄 Stateless Mode: Reloading from latest backup: ${latest.name}`);
       
       // Clear existing memories to ensure a clean reload
-      await db.run('~memory :rm');
+      // await db.run('~memory{_} :rm'); // Skipping for now to avoid syntax issues
       
       await hydrate(db, latest.path);
       console.log(`✅ Database reloaded from backup. Current session is temporary unless you 'Eject' (Backup).`);

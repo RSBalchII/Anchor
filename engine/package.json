@@ -4,6 +4,7 @@
   "description": "Headless Context Engine & Knowledge Graph",
   "main": "src/index.js",
   "bin": "src/index.js",
+  "type,": "module",
   "scripts": {
     "start": "node src/index.js",
     "migrate": "node src/migrate_history.js",
@@ -26,7 +27,8 @@
     "cors": "^2.8.5",
     "cozo-node": "^0.7.5",
     "express": "^4.18.2",
-    "js-yaml": "^4.1.1"
+    "js-yaml": "^4.1.1",
+    "node-llama-cpp": "^3.14.5"
   },
   "devDependencies": {
     "pkg": "^5.8.1"

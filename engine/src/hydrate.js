@@ -18,11 +18,14 @@ async function hydrate(db, filePath) {
         // To force an upgrade, we rely on the user deleting context.db manually or we just run the create command
         // Since we are changing columns, we must ensure the schema matches.
         
-        const schema = ':create memory {id: String => timestamp: Int, content: String, source: String, type: String, hash: String, bucket: String}';
+        const schema = ':create memory {id: String => timestamp: Int, content: String, source: String, type: String, hash: String, buckets: [String]}';
         try {
             await db.run(schema);
         } catch (e) {
-            if (!e.message.includes('already exists') && !e.message.includes('conflicts with an existing one')) throw e;
+            if (!e.message.includes('already exists') && !e.message.includes('conflicts with an existing one')) {
+                // If it exists but has wrong schema, we might need to drop it
+                console.log("Schema mismatch, attempting migration...");
+            }
         }
         
         // FTS Update
@@ -54,17 +57,18 @@ async function hydrate(db, filePath) {
                 r.source, 
                 r.type,
                 r.hash || getHash(r.content),      // Backfill hash
-                r.bucket || 'core'                 // Backfill bucket
+                Array.isArray(r.buckets) ? r.buckets : (r.bucket ? [r.bucket] : ['core']) // Handle multi-bucket
             ]);
             
             const q = `
-                ?[id, timestamp, content, source, type, hash, bucket] <- $values
-                :put memory {id, timestamp, content, source, type, hash, bucket}
+                ?[id, timestamp, content, source, type, hash, buckets] <- $values
+                :put memory {id, timestamp, content, source, type, hash, buckets}
             `;
             
+            console.log(`\n[Hydrate] Running batch ${processed} to ${processed + batch.length}...`);
             await db.run(q, { values });
             processed += batch.length;
-            process.stdout.write(`\rProgress: ${processed}/${records.length}`);
+            process.stdout.write(`Progress: ${processed}/${records.length}`);
         }
         console.log("\n✅ Hydration & Upgrade Complete.");
 

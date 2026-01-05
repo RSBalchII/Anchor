@@ -1,3 +1,4 @@
+require('./core/logger');
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -54,8 +55,8 @@ async function boot() {
 }
 
 // Handle graceful shutdown
-const shutdown = async () => {
-  console.log('Shutting down gracefully...');
+const shutdown = async (signal) => {
+  console.log(`Shutting down gracefully... (Signal: ${signal})`);
   try {
     await db.close();
   } catch (e) {
@@ -64,8 +65,16 @@ const shutdown = async () => {
   process.exit(0);
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+    shutdown('uncaughtException');
+});
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    shutdown('unhandledRejection');
+});
 
 boot();
 

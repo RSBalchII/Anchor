@@ -32,11 +32,11 @@ async function handleFileChange(filePath) {
     
     // Auto-Bucket Logic: Top-level folder name = Bucket
     const pathParts = relPath.split(path.sep);
-    const bucket = pathParts.length > 1 ? pathParts[0] : 'core';
+    const buckets = pathParts.length > 1 ? [pathParts[0]] : ['core'];
 
     // Deduplication Check
-    const checkQuery = `?[id] := *memory{id, hash: $hash, bucket: $bucket}`;
-    const check = await db.run(checkQuery, { hash, bucket });
+    const checkQuery = `?[id] := *memory{id, hash: $hash}`;
+    const check = await db.run(checkQuery, { hash });
     
     if (check.ok && check.rows.length > 0) {
         return; 
@@ -46,9 +46,9 @@ async function handleFileChange(filePath) {
     const id = `file_${Buffer.from(relPath).toString('base64').replace(/=/g, '')}`;
     
     // Using :put to update if ID matches (file edit) but hash changed
-    const query = `?[id, timestamp, content, source, type, hash, bucket] <- $data :put memory {id, timestamp, content, source, type, hash, bucket}`;
+    const query = `?[id, timestamp, content, source, type, hash, buckets] <- $data :put memory {id, timestamp, content, source, type, hash, buckets}`;
     const params = {
-      data: [[ id, Date.now(), content, relPath, ext || 'text', hash, bucket ]]
+      data: [[ id, Date.now(), content, relPath, ext || 'text', hash, buckets ]]
     };
     
     await db.run(query, params);

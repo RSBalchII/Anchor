@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Anchor Chat Cockpit</title>
+    <style>
+        :root { --bg: #0f172a; --panel: #1e293b; --text: #e2e8f0; --accent: #00D4FF; --warn: #f59e0b; }
+        body { background: var(--bg); color: var(--text); font-family: monospace; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Layout */
+        .layout { display: flex; width: 100%; }
+        .sidebar { width: 250px; background: #020617; border-right: 1px solid #334155; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .main { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .settings { width: 300px; background: var(--panel); border-left: 1px solid #334155; padding: 20px; overflow-y: auto; }
+
+        /* Chat Area */
+        #chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { padding: 15px; border-radius: 8px; max-width: 80%; line-height: 1.5; }
+        .msg.user { background: #334155; align-self: flex-end; }
+        .msg.ai { background: #1e293b; border: 1px solid #475569; align-self: flex-start; }
+        
+        .input-area { padding: 20px; background: #020617; border-top: 1px solid #334155; display: flex; gap: 10px; }
+        textarea { flex: 1; background: #1e293b; color: white; border: 1px solid #475569; padding: 10px; border-radius: 6px; resize: none; font-family: inherit; }
+        
+        /* Controls */
+        label { font-size: 0.8em; color: #94a3b8; display: block; margin-bottom: 5px; }
+        select, input[type="number"], input[type="text"] { width: 100%; background: #0f172a; color: white; border: 1px solid #475569; padding: 8px; border-radius: 4px; margin-bottom: 15px; }
+        button { width: 100%; padding: 10px; background: var(--accent); color: black; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        button.secondary { background: #334155; color: white; }
+
+        .bucket-chip { display: inline-block; padding: 4px 8px; background: #334155; font-size: 0.8em; border-radius: 12px; margin: 2px; cursor: pointer; border: 1px solid transparent; }
+        .bucket-chip.active { background: var(--accent); color: black; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div class="sidebar">
+            <h3>📝 Manual Context</h3>
+            <textarea id="manual-context" style="flex: 1; background: #0f172a; color: #94a3b8; border: 1px solid #334155; padding: 10px; resize: none; font-size: 0.8em; font-family: inherit;" placeholder="Paste large text chunks here to include them in the context..." oninput="document.getElementById('ctx-len').innerText=this.value.length"></textarea>
+            <div style="margin-top: 10px; font-size: 0.8em; color: #64748b;">
+                Context Length: <span id="ctx-len">0</span> chars
+            </div>
+        </div>
+
+        <div class="main">
+            <div id="chat-history">
+                <div class="msg ai">System Online. Select a model to begin.</div>
+            </div>
+            <div class="input-area">
+                <textarea id="prompt" rows="3" placeholder="Send a message..." onkeydown="if(event.key==='Enter' && !event.shiftKey) send()"></textarea>
+                <button onclick="send()" style="width: 80px;">SEND</button>
+            </div>
+        </div>
+
+        <div class="settings">
+            <h3>⚙️ Engine Room</h3>
+            
+            <label>Model</label>
+            <select id="model-select"></select>
+            
+            <label>Context Size (Tokens)</label>
+            <input type="number" id="ctx-size" value="4096">
+            
+            <label>System Prompt</label>
+            <textarea id="sys-prompt" style="width: 100%; height: 80px; margin-bottom: 15px; font-size: 0.8em;">You are a helpful AI assistant connected to the Anchor Context Engine.</textarea>
+            
+            <button onclick="loadModel()">LOAD / RELOAD MODEL</button>
+            <div id="status" style="margin-top: 10px; font-size: 0.8em; color: var(--accent);"></div>
+
+            <hr style="border-color: #334155; margin: 20px 0;">
+            
+            <label>Temperature (<span id="temp-val">0.7</span>)</label>
+            <input type="range" id="temp" min="0" max="2" step="0.1" value="0.7" oninput="document.getElementById('temp-val').innerText=this.value">
+            
+            <label>Top P (<span id="topp-val">0.9</span>)</label>
+            <input type="range" id="topp" min="0" max="1" step="0.05" value="0.9" oninput="document.getElementById('topp-val').innerText=this.value">
+
+            <label>Top K (<span id="topk-val">40</span>)</label>
+            <input type="range" id="topk" min="0" max="100" step="1" value="40" oninput="document.getElementById('topk-val').innerText=this.value">
+
+            <label>Repeat Penalty (<span id="rep-val">1.1</span>)</label>
+            <input type="range" id="rep-pen" min="1" max="2" step="0.05" value="1.1" oninput="document.getElementById('rep-val').innerText=this.value">
+
+            <label>Max Tokens</label>
+            <input type="number" id="max-tokens" value="1024">
+        </div>
+    </div>
+
+    <script>
+        // 1. Initialization
+        async function init() {
+            // Load Models
+            const mRes = await fetch('/v1/models');
+            const models = await mRes.json();
+            const sel = document.getElementById('model-select');
+            models.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.innerText = m;
+                sel.appendChild(opt);
+            });
+        }
+
+        async function loadModel() {
+            const btn = document.querySelector('button[onclick="loadModel()"]');
+            btn.innerText = "LOADING...";
+            const model = document.getElementById('model-select').value;
+            const ctxSize = document.getElementById('ctx-size').value;
+            const sysPrompt = document.getElementById('sys-prompt').value;
+
+            try {
+                const res = await fetch('/v1/inference/load', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model,
+                        options: { ctxSize, systemPrompt: sysPrompt }
+                    })
+                });
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    throw new Error(data.error || "Unknown Server Error");
+                }
+
+                document.getElementById('status').innerText = data.message;
+                document.getElementById('status').style.color = "var(--accent)";
+                btn.innerText = "LOAD / RELOAD MODEL";
+            } catch (e) {
+                document.getElementById('status').innerText = "❌ " + e.message;
+                document.getElementById('status').style.color = "#ef4444";
+                btn.innerText = "RETRY";
+            }
+        }
+
+        async function send() {
+            const input = document.getElementById('prompt');
+            const txt = input.value.trim();
+            if (!txt) return;
+
+            // Add User Msg
+            addMsg(txt, 'user');
+            input.value = '';
+
+            const loadingId = addMsg("Thinking...", 'ai');
+            
+            // Construct Prompt with Manual Context
+            const manualContext = document.getElementById('manual-context').value.trim();
+            let finalPrompt = txt;
+            
+            if (manualContext) {
+                finalPrompt = `[CONTEXT START]\n${manualContext}\n[CONTEXT END]\n\n${txt}`;
+            }
+
+            try {
+                const res = await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: finalPrompt }],
+                        temperature: document.getElementById('temp').value,
+                        topP: document.getElementById('topp').value,
+                        topK: document.getElementById('topk').value,
+                        repeatPenalty: document.getElementById('rep-pen').value,
+                        maxTokens: document.getElementById('max-tokens').value
+                    })
+                });
+                const data = await res.json();
+                
+                // Replace loading with real response
+                document.getElementById(loadingId).innerText = data.choices[0].message.content;
+            } catch (e) {
+                document.getElementById(loadingId).innerText = "Error: " + e;
+            }
+        }
+
+        function addMsg(text, role) {
+            const div = document.createElement('div');
+            div.className = `msg ${role}`;
+            div.innerText = text;
+            div.id = 'msg-' + Date.now();
+            document.getElementById('chat-history').appendChild(div);
+            // Scroll to bottom
+            const hist = document.getElementById('chat-history');
+            hist.scrollTop = hist.scrollHeight;
+            return div.id;
+        }
+
+        init();
+    </script>
+</body>
+</html>

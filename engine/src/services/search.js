@@ -4,11 +4,9 @@ const { db } = require('../core/db');
 async function basicSearch(query, max_chars = 5000, buckets) {
   try {
     const useBuckets = Array.isArray(buckets) && buckets.length > 0;
-    const searchQuery = useBuckets 
-      ? `?[id, timestamp, content, source, type, bucket] := *memory{id, timestamp, content, source, type, bucket}, is_in(bucket, $b)`
-      : `?[id, timestamp, content, source, type, bucket] := *memory{id, timestamp, content, source, type, bucket}`;
+    const searchQuery = `?[id, timestamp, content, source, type, buckets] := *memory{id, timestamp, content, source, type, buckets}`;
     
-    const result = await db.run(searchQuery, useBuckets ? { b: buckets } : {});
+    const result = await db.run(searchQuery);
 
     let context = '';
     let charCount = 0;
@@ -16,6 +14,11 @@ async function basicSearch(query, max_chars = 5000, buckets) {
     if (result.rows) {
       const filteredRows = result.rows.filter(row => {
         const [id, timestamp, content, source, type, b] = row;
+        
+        // Filter by bucket in JS for now to avoid Cozo syntax issues
+        const bucketMatch = !useBuckets || b.some(x => buckets.includes(x));
+        if (!bucketMatch) return false;
+
         return content.toLowerCase().includes(query.toLowerCase()) ||
                source.toLowerCase().includes(query.toLowerCase());
       });
@@ -58,11 +61,16 @@ async function executeSearch(query, bucket, buckets, max_chars = 5000, deep = fa
     const baseK = deep ? 200 : 30;
     const k = Math.max(baseK, Math.ceil(max_chars / 500));
 
-    const ftsQuery = useBuckets 
-      ? `?[id, score] := ~memory:content_fts{id | query: $q, k: ${k}, bind_score: s}, *memory{id, bucket: b}, is_in(b, $b), score = s`
-      : `?[id, score] := ~memory:content_fts{id | query: $q, k: ${k}, bind_score: s}, score = s`;
+    // Sanitize query for CozoDB FTS: remove characters that might break the parser
+    // Keeping alphanumeric, spaces, and basic punctuation that doesn't act as operators
+    const sanitizedQuery = query.replace(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    const ftsParams = useBuckets ? { q: query, b: targetBuckets } : { q: query };
+    if (!sanitizedQuery) {
+        return await basicSearch(query, max_chars, targetBuckets);
+    }
+
+    const ftsQuery = `?[id, score] := ~memory:content_fts{id | query: $q, k: ${k}, bind_score: s}, score = s`;
+    const ftsParams = { q: sanitizedQuery };
     let ftsResult;
     
     try {
@@ -80,8 +88,8 @@ async function executeSearch(query, bucket, buckets, max_chars = 5000, deep = fa
     const scores = Object.fromEntries(ftsResult.rows);
     
     const contentQuery = `
-      ?[id, content, source] := 
-        *memory{id, content, source},
+      ?[id, content, source, buckets] := 
+        *memory{id, content, source, buckets},
         is_in(id, $ids)
     `;
     
@@ -91,7 +99,12 @@ async function executeSearch(query, bucket, buckets, max_chars = 5000, deep = fa
     const searchRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
 
     for (const row of contentResult.rows) {
-        const [id, content, source] = row;
+        const [id, content, source, b] = row;
+        
+        // Filter by bucket in JS
+        const bucketMatch = !useBuckets || b.some(x => targetBuckets.includes(x));
+        if (!bucketMatch) continue;
+
         let match;
         searchRegex.lastIndex = 0; 
         while ((match = searchRegex.exec(content)) !== null) {
