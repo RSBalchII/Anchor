@@ -1,0 +1,16 @@
+# Git LFS Configuration
+# Track large binary files for distribution
+# Executable Binaries
+*.exe filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+# Compiled Binaries (non-Windows)
+sovereign-context-engine-linux filter=lfs diff=lfs merge=lfs -text
+sovereign-context-engine-macos filter=lfs diff=lfs merge=lfs -text
+sovereign-context-engine-win.exe filter=lfs diff=lfs merge=lfs -text
+# Prebuilt Native Modules
+*.node filter=lfs diff=lfs merge=lfs -text
+# Database Files (optional, for large snapshots)
+*.db filter=lfs diff=lfs merge=lfs -text
+cozo_node.node filter=lfs diff=lfs merge=lfs -text
+cozo_node_prebuilt.node filter=lfs diff=lfs merge=lfs -text
+engine/dist/* filter=lfs diff=lfs merge=lfs -text
