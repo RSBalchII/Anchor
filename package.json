@@ -1,0 +1,16 @@
+{
+  "name": "ece-core",
+  "version": "1.0.0",
+  "description": "Sovereign Context Engine Core",
+  "main": "run_model.js",
+  "scripts": {
+    "start": "node run_model.js",
+    "advanced": "node advanced_example.js"
+  },
+  "keywords": ["llm", "llama", "ai", "nlp"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-llama-cpp": "^3.1.1"
+  }
+}

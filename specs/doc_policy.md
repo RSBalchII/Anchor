@@ -4,10 +4,11 @@
 
 ## Core Philosophy
 1. **Code is King:** Code is the only source of truth. Documentation is a map, not the territory.
-2. **Visuals over Text:** Prefer Mermaid diagrams to paragraphs.
-3. **Brevity:** Text sections must be <500 characters.
-4. **Pain into Patterns:** Every major bug must become a Standard.
-5. **LLM-First Documentation:** Documentation must be structured for LLM consumption and automated processing.
+2. **Synchronous Testing:** EVERY feature or data change MUST include a matching update to the Test Suite.
+3. **Visuals over Text:** Prefer Mermaid diagrams to paragraphs.
+4. **Brevity:** Text sections must be <500 characters.
+5. **Pain into Patterns:** Every major bug must become a Standard.
+6. **LLM-First Documentation:** Documentation must be structured for LLM consumption and automated processing.
 
 ## Structure
 
@@ -58,8 +59,9 @@
 *   **Ghost Engine Stability:** CozoDB schema creation must handle FTS failures gracefully to prevent browser crashes (Standard 031)
 *   **Ghost Engine Initialization Flow:** Database initialization must complete before processing ingestion requests to prevent race conditions (Standard 032)
 *   **CozoDB Syntax Compliance:** All CozoDB queries must use proper syntax to ensure successful execution (Standard 033)
-*   **Node.js Monolith Migration:** System must migrate from Python/Browser Bridge to Node.js Monolith architecture (Standard 034)
-
+*   **Node.js Monolith Migration:** System must migrate from Python/Browser Bridge to Node.js Monolith architecture (Standard 034)* **Cortex Upgrade**: Local inference via `node-llama-cpp` for GGUF support (Standard 038)
+* **Multi-Bucket Schema**: Memories support multiple categories via `buckets: [String]` (Standard 039)
+* **Cozo Syntax Hardening**: Avoid `unnest` and complex list queries in CozoDB (Standard 040)
 ## LLM Protocol
 1. **Read-First:** Always read `specs/spec.md`, `SCRIPT_PROTOCOL.md`, AND `specs/standards/` before coding.
 2. **Drafting:** When asked to document, produce **Mermaid diagrams** and short summaries.

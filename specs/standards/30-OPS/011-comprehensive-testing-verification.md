@@ -1,96 +1,37 @@
 # Standard 011: Comprehensive Testing and Verification Protocol
 
-## What Happened?
-The Anchor Core system required a comprehensive testing approach to prevent issues like missing endpoints, function syntax errors, model loading failures, and data pipeline problems. Previously, these issues were discovered reactively during development or deployment, causing delays and debugging overhead.
+**Status:** Active | **Category:** OPS | **Authority:** System-Enforced
 
-## The Cost
-- Hours spent debugging missing endpoints after deployment
-- Time wasted on syntax errors in critical files
-- Model loading failures discovered during user testing
-- Data pipeline issues found late in the development cycle
-- Lack of systematic verification leading to inconsistent quality
+## 1. What Happened
+Features were implemented (e.g., Multi-Bucket Schema, Scribe State) but tests were not updated in parallel. This led to "Golden Path" search results that masked broken edge cases (like bucket-filtering bypasses) until manually discovered.
 
-## The Rule
-1. **Dedicated Test Directory**: All test files must be organized in a dedicated `tests/` directory in the project root
-    ```bash
-    tests/
-    ├── comprehensive_test_suite.py
-    ├── endpoint_syntax_verification.py
-    ├── test_model_loading.py
-    ├── test_model_availability.py
-    ├── test_gpu_fixes.py
-    ├── test_orchestrator.py
-    ├── model_test.html
-    └── README.md
-    ```
+## 2. The Cost
+- **Regressions**: New features broke older, unverified logic.
+- **False Confidence**: Tests passed while core functionality (filtering) was actually failing.
+- **Manual Toil**: Developers spent hours re-verifying what the suite should have caught.
 
-2. **Comprehensive Test Coverage**: Tests must cover:
-   - Model loading functionality
-   - Data pipeline verification
-   - Endpoint accessibility
-   - Missing endpoint detection
-   - Function syntax error detection
-   - System health verification
+## 3. The Rule: Synchronous Test-Code Binding
+**ANY TIME any feature, API endpoint, or data setting is adjusted, the corresponding Test Suite (`engine/tests/suite.js`) MUST be updated in the same commit.**
 
-3. **Endpoint Verification Protocol**: All critical endpoints must be tested for accessibility:
-   ```python
-   # Example endpoint test pattern
-   critical_endpoints = [
-       ("/health", "GET", 200),
-       ("/v1/chat/completions", "POST", 400),  # Expected 400 due to missing body
-       ("/v1/gpu/status", "GET", 200),
-       # ... add all critical endpoints
-   ]
-   ```
+### Specific Constraints:
+1. **New Endpoints**: Any new route in `api.js` requires a dedicated test case in `suite.js`.
+2. **Schema Changes**: If a CozoDB relation or bucket logic changes, the "Retrieval" section of the test suite must be updated to verify the new logic.
+3. **Data Transformations**: If the ingestion pipeline (YAML formatting, hash calculation) changes, the "Ingestion" test must verify the new output.
+4. **Zero-Fail Policy**: `npm test` must return "0 failed" before any code is considered "Completed".
 
-4. **Syntax Verification**: Critical Python files must be checked for syntax errors:
-   ```python
-   # Use AST parsing to verify syntax
-   import ast
-   with open(file_path, 'r') as f:
-       source_code = f.read()
-   ast.parse(source_code)  # Will raise SyntaxError if invalid
-   ```
+## 4. Test Suite Structure (Node.js/ECE)
+The ECE engine uses a unified JavaScript test runner [engine/tests/suite.js](engine/tests/suite.js):
 
-5. **Test Documentation**: All test files must be documented in `tests/README.md` with:
-   - Purpose of each test file
-   - How to run the tests
-   - Test coverage details
-   - Expected outputs
+- **Core Health**: Verifies connectivity and model availability.
+- **Ingestion Pipeline**: Verifies content persistence and multi-bucket assignment.
+- **Retrieval**: Verifies FTS accuracy, ID lookup, and strict bucket filtering.
+- **Scribe**: Verifies Markovian state updates and clearance.
 
-6. **Pre-Deployment Verification**: Before any deployment, run the comprehensive test suite:
-   ```bash
-   python tests/comprehensive_test_suite.py
-   ```
+## 5. Execution Protocol
+Before marking a task as [x] in `tasks.md`:
+1. Start the engine: `cd engine ; node src/index.js`
+2. Run tests: `cd engine ; npm test`
+3. If failure > 0: Revert or Fix.
 
-7. **Continuous Verification**: Implement automated testing in CI/CD pipelines to catch issues early
-
-## Implementation Example
-
-### Running the Comprehensive Test Suite:
-```bash
-# Basic test run
-python tests/comprehensive_test_suite.py
-
-# With custom parameters
-python tests/comprehensive_test_suite.py --url http://localhost:8000 --token sovereign-secret --output report.json
-
-# Endpoint and syntax verification only
-python tests/endpoint_syntax_verification.py
-```
-
-### Expected Test Coverage:
-- Model loading: 100% coverage of model files and configurations
-- API endpoints: 100% verification of all documented endpoints
-- Syntax: 100% verification of critical Python files
-- Data pipeline: End-to-end verification of data flow
-- System health: Verification of all core services
-
-## Verification Checklist
-- [ ] All test files organized in `tests/` directory
-- [ ] Comprehensive test suite covers all major components
-- [ ] Endpoint verification tests all critical endpoints
-- [ ] Syntax verification tests all critical Python files
-- [ ] Tests are documented in `tests/README.md`
-- [ ] Test suite runs without errors
-- [ ] Test reports are generated and reviewed
+---
+*Verified by Architecture Council.*

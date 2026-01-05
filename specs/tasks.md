@@ -1,60 +1,30 @@
 # Context-Engine Implementation Tasks
 
-## Current Work Queue (Unified Anchor Architecture)
+## Current Work Queue
 
-### Phase 5: Unified Anchor (Completed)
-- [x] **Consolidation**: Merge File Server and Bridge into `webgpu_bridge.py` (Port 8000).
-- [x] **Renaming**: `model-server-chat` -> `chat.html`, `neural-terminal` -> `terminal.html`.
-- [x] **Cleanup**: Archive legacy startup scripts.
-- [x] **Launcher**: Create `start-anchor.bat`.
-- [x] **Native Shell Spawning**: Implement `/v1/system/spawn_shell` endpoint.
-- [x] **Dashboard Integration**: Add Anchor Shell spawn button to `index.html`.
-- [x] **Native Client**: Create `anchor.py` for PowerShell terminal spawning.
-- [x] **Architecture Documentation**: Create Anchor Core specification.
-- [x] **Testing Suite**: Create `test_model_loading.py` and `model_test.html` for endpoint verification.
-- [x] **Troubleshooting Documentation**: Add model loading troubleshooting standard.
+### Phase 12: Production Polish (Completed)
+- [x] **Post-Migration Safety**: Implement emergency backups before schema changes (`db.js`).
+- [x] **API Fortification**: Add input validation for `ingest` and `search` endpoints (`api.js`).
+- [x] **Search Resiliency**: Fix bucket-filtering bypass in `executeSearch`.
+- [x] **Verification Suite**: 100% pass rate on `npm test`.
+- [ ] **Chat Cockpit Enhancement**: Add conversation history persistence to `chat.html`
+- [ ] **Streaming Responses**: Implement SSE for real-time token streaming
+- [ ] **One-Click Install**: Create `setup.ps1` / `setup.sh` scripts
 
-### Phase 5.1: Model Loading Fixes (Completed)
-- [x] **URL Construction Fix**: Implement `/models/{model}/resolve/main/{file}` redirect endpoint for MLC-LLM compatibility.
-- [x] **File Renaming**: Rename `root-mic.html` -> `anchor-mic.html`, `root-dreamer.html` -> `memory-builder.html`, `sovereign-db-builder.html` -> `db_builder.html`.
-- [x] **UI Layout Fix**: Add proper margins to prevent elements from being cut off at top of browser window.
-- [x] **Server Stability**: Fix server hanging issues caused by problematic path parameter syntax.
-- [x] **Endpoint Verification**: Ensure all documented endpoints are accessible and responding properly.
+### Phase 11: Markovian Reasoning Engine (Completed)
+- [x] **Scribe Service**: Created `engine/src/services/scribe.js` for rolling state
+- [x] **Context Weaving**: Upgraded `inference.js` to auto-inject session state
+- [x] **Test Suite**: Created `engine/tests/suite.js` for API verification
+- [x] **Benchmark Tool**: Created `engine/tests/benchmark.js` for accuracy testing
+- [x] **Config Fixes**: Externalized MODELS_DIR, fixed package.json typo
+- [x] **API Endpoints**: Added `/v1/scribe/*` and `/v1/inference/status`
+- [x] **Standard 041**: Documented Markovian architecture
 
-### Phase 5.2: Search Enhancement (Completed)
-- [x] **BM25 Implementation**: Replace regex-based search with CozoDB FTS using BM25 algorithm in `tools/chat.html`.
-- [x] **Index Creation**: Add FTS index creation in `memory-builder.html`, `db_builder.html`, and `chat.html` initialization.
-- [x] **Hybrid Search**: Maintain vector search alongside BM25 for semantic + lexical retrieval.
-- [x] **Fallback Mechanism**: Implement regex fallback if FTS index is unavailable.
-- [x] **Stemming Support**: Enable English stemming for better word variation matching.
-
-### Phase 6: Text-Only + Watchdog Architecture (Completed)
-- [x] **Vision Removal**: Remove brittle Vision/Ollama dependencies to increase survival rate.
-- [x] **Watchdog Service**: Create `tools/watchdog.py` for passive text file monitoring.
-- [x] **File Ingestion**: Implement `/v1/memory/ingest` endpoint in bridge for text ingestion.
-- [x] **Debounce & Hash Check**: Add debounce and content hash checking to prevent duplicate ingestion.
-- [x] **Auto-Resurrection**: Enhance `ResurrectionManager` to kill existing browser processes before launching new ones.
-- [x] **Streaming CLI**: Update `anchor.py` to use streaming for better UX.
-- [x] **Documentation Update**: Update architecture specs and standards to reflect new approach.
-
-### Phase 7: Context Expansion & Persistence (Completed)
-- [x] **Code File Support**: Expand watchdog to monitor code extensions (.py, .js, .html, etc.)
-- [x] **Browser Profile Cleanup**: Add unique temp profiles and cleanup for browser processes
-- [x] **Chat Session Persistence**: Auto-save conversations to context/sessions/ directory
-- [x] **Ingestion Loop Closure**: Ensure chat sessions become ingested context automatically
-- [x] **Memory Leak Prevention**: Implement profile cleanup to prevent disk space issues
-- [x] **Documentation Update**: Create new standards 019-021 for new features
-
-### Phase 8: Session Recorder & Text-File Source of Truth (Completed)
-- [x] **Daily Session Files**: Create `chat_YYYY-MM-DD.md` files for each day's conversations
-- [x] **Text-File Source of Truth**: Implement "Database is Cache" philosophy
-
-### Phase 9: Node.js Monolith & Snapshot Portability (Completed)
-- [x] **Migration**: Move from Python/Browser Bridge to Node.js Monolith (Standard 034).
-- [x] **FTS Optimization**: Implement native CozoDB BM25 search.
-- [x] **Operational Safety**: Implement detached execution and logging protocols (Standard 035/036).
-- [x] **Snapshot Portability**: Create "Eject" (Backup) and "Hydrate" (Restore) workflow (Standard 037).
-- [x] **Search Hardening**: Implement result truncation for large context files.
+### Phase 10: Cortex Upgrade (Completed)
+- [x] **Multi-Bucket Schema**: Migrate from single `bucket` to `buckets: [String]` (Standard 039).
+- [x] **Dreamer Service**: Implement background self-organization via local LLM.
+- [x] **Cozo Hardening**: Resolve list-handling and `unnest` syntax errors (Standard 040).
+- [x] **ESM Interop**: Fix dynamic import issues for native modules in CJS.
 
 - [x] **Cross-Machine Sync**: Enable file sync via Dropbox/Git for multi-device access
 - [x] **Infinite Loop**: Create feedback loop: Chat -> File -> Ingestion -> Memory -> Next Chat
