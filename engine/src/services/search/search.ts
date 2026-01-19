@@ -4,6 +4,7 @@
  * Implements:
  * 1. Engram Layer (Fast Lookup) - O(1) lookup for known entities
  * 2. Provenance Boosting - Sovereign content gets boost
+ * 3. Tag-Walker Protocol - Graph-based associative retrieval (Replacing Vector Search)
  */
 
 import { db } from '../../core/db.js';
@@ -54,28 +55,34 @@ export async function lookupByEngram(key: string): Promise<string[]> {
 }
 
 /**
- * Perform Semantic Vector Search
+ * Perform Graph-Based Associative "Neighbor Walk"
+ * Phase 3 of Tag-Walker Algorithm
  */
-async function vectorSearch(query: string, buckets: string[] = [], maxChars: number = 524288): Promise<SearchResult[]> {
+async function neighborWalk(
+  sourceTags: string[],
+  excludeIds: Set<string>,
+  count: number = 5
+): Promise<SearchResult[]> {
+  if (sourceTags.length === 0) return [];
+
+  // Deduplicate tags and simple sanitization
+  const uniqueTags = [...new Set(sourceTags)].filter(t => t.length > 0);
+  if (uniqueTags.length === 0) return [];
+
+  // Query: Select items where intersection(tags, $sourceTags) is not empty.
+  // Using Cozo's set intersection
+  const queryCozo = `
+    ?[id, content, source, timestamp, buckets, tags, epochs, provenance] := 
+    *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
+    length(intersection(tags, $tags)) > 0,
+    :limit ${count * 2} 
+  `;
+
   try {
-    const queryVec = await getEmbedding(query);
-    if (!queryVec || queryVec.length === 0) return [];
-
-    const k = Math.min(2000, Math.max(50, Math.ceil(maxChars / 400)));
-    const ef = Math.min(3200, k * 2);
-
-    let queryCozo = '';
-    if (buckets.length > 0) {
-      queryCozo = `?[id, content, source, timestamp, buckets, tags, epochs, provenance, dist] := ~memory:knn{id | query: vec($queryVec), k: ${k}, ef: ${ef}, bind_distance: d}, dist = d, *memory{id, content, source, timestamp, buckets, tags, epochs, provenance, embedding}, length(intersection(buckets, $buckets)) > 0`;
-    } else {
-      queryCozo = `?[id, content, source, timestamp, buckets, tags, epochs, provenance, dist] := ~memory:knn{id | query: vec($queryVec), k: ${k}, ef: ${ef}, bind_distance: d}, dist = d, *memory{id, content, source, timestamp, buckets, tags, epochs, provenance, embedding}`;
-    }
-
-    const result = await db.run(queryCozo, { queryVec, buckets });
-
+    const result = await db.run(queryCozo, { tags: uniqueTags });
     if (!result.rows) return [];
 
-    return result.rows.map((row: any[]) => ({
+    let neighbors = result.rows.map((row: any[]) => ({
       id: row[0],
       content: row[1],
       source: row[2],
@@ -84,17 +91,31 @@ async function vectorSearch(query: string, buckets: string[] = [], maxChars: num
       tags: row[5],
       epochs: row[6],
       provenance: row[7],
-      score: (1.0 - row[8]) * 100 // Convert distance to score (approx)
+      score: 1.0 // Base score for association
     }));
 
+    // Filter excluded
+    neighbors = neighbors.filter((n: SearchResult) => !excludeIds.has(n.id));
+
+    // Calculate Associative Score (Jaccard Index-ish: count common tags)
+    neighbors.forEach((n: SearchResult) => {
+      // row[5] is tags which comes as array/list from Cozo
+      const nTags = Array.isArray(n.tags) ? n.tags : [];
+      // Casting to string[] for filter
+      const common = (nTags as any[]).filter((t: string) => uniqueTags.includes(t)).length;
+      n.score = 50 + (common * 10); // Base 50 + 10 per shared tag
+    });
+
+    return neighbors.slice(0, count);
+
   } catch (e) {
-    console.error('[Search] Vector search failed:', e);
+    console.error('[Search] Neighbor Walk failed:', e);
     return [];
   }
 }
 
 /**
- * Execute search with provenance-aware scoring and Intelligent Routing
+ * Execute search with Tag-Walker Protocol
  */
 export async function executeSearch(
   query: string,
@@ -104,84 +125,95 @@ export async function executeSearch(
   _deep: boolean = false,
   provenance: 'sovereign' | 'external' | 'all' = 'all'
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
-  console.log(`[Search] executeSearch called with maxChars: ${maxChars}, provenance: ${provenance}`);
+  console.log(`[Search] executeSearch (Tag-Walker) called with maxChars: ${maxChars}, provenance: ${provenance}`);
+
+  // Budget Split (Approximate by count, assuming ~500 chars/atom)
+  const totalTarget = Math.ceil(maxChars / 500);
+  const phase1Target = Math.ceil(totalTarget * 0.70); // 70% Anchor
+  const phase3Target = Math.ceil(totalTarget * 0.30); // 30% Neighbor
 
   // 1. ENGRAM LOOKUP
   const engramResults = await lookupByEngram(query);
+  let finalResults: SearchResult[] = [];
+  const includedIds = new Set<string>();
+
   if (engramResults.length > 0) {
     console.log(`[Search] Found ${engramResults.length} results via Engram lookup for: ${query}`);
     const engramContextQuery = `?[id, content, source, timestamp, buckets, tags, epochs, provenance] := *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, id in $ids`;
     const engramContentResult = await db.run(engramContextQuery, { ids: engramResults });
-    if (engramContentResult.rows && engramContentResult.rows.length > 0) {
-      const results: SearchResult[] = engramContentResult.rows.map((row: any[]) => ({
-        id: row[0], content: row[1], source: row[2], timestamp: row[3], buckets: row[4], tags: row[5], epochs: row[6], provenance: row[7], score: 100
-      }));
-      return formatResults(results, maxChars);
+    if (engramContentResult.rows) {
+      engramContentResult.rows.forEach((row: any[]) => {
+        if (!includedIds.has(row[0])) {
+          finalResults.push({
+            id: row[0], content: row[1], source: row[2], timestamp: row[3], buckets: row[4], tags: row[5], epochs: row[6], provenance: row[7], score: 100
+          });
+          includedIds.add(row[0]);
+        }
+      });
     }
   }
 
-  // 2. INTELLIGENT ROUTING
+  // 2. PHASE 1: ANCHOR SEARCH (FTS)
   const targetBuckets = buckets || (bucket ? [bucket] : []);
 
-  let results: SearchResult[] = [];
+  // Note: runTraditionalSearch returns raw matches. We boost and sort them here.
+  const anchorResults = await runTraditionalSearch(query, targetBuckets);
 
-  console.log('[Search] Routing to Hybrid Search (FTS + Vector)');
-
-  const [ftsRes, vecRes] = await Promise.all([
-    runTraditionalSearch(query, targetBuckets),
-    // vectorSearch(query, targetBuckets, maxChars) // Disabled for testing stability if needed
-    Promise.resolve([] as SearchResult[]) // Using Mock for now as agreed in plan
-  ]);
-
-  // Merge Strategy
-  const idMap = new Map<string, SearchResult>();
-
-  // Add FTS results
-  ftsRes.forEach(r => idMap.set(r.id, r));
-
-  // Add Vector results
-  vecRes.forEach(r => {
-    if (idMap.has(r.id)) {
-      const existing = idMap.get(r.id)!;
-      existing.score += (r.score * 1.5);
+  // Provenance Boosting (Phase 1)
+  anchorResults.forEach(r => {
+    // Apply Sovereign Bias
+    if (provenance === 'sovereign') {
+      if (r.provenance === 'sovereign') r.score *= 3.0;
+      else r.score *= 0.5;
+    } else if (provenance === 'external') {
+      if (r.provenance !== 'sovereign') r.score *= 1.5;
     } else {
-      idMap.set(r.id, r);
+      if (r.provenance === 'sovereign') r.score *= 2.0;
     }
   });
 
-  results = Array.from(idMap.values());
+  // Sort and Select Anchors
+  anchorResults.sort((a, b) => b.score - a.score);
+  const topAnchors = anchorResults.slice(0, Math.max(10, phase1Target * 2)); // Grab enough candidates
 
-  // Fallback
-  if (results.length === 0) {
-    console.log('[Search] 0 results. Fallback...');
-    // Simplified fallback to FTS again? Or just empty.
-    // If runTraditionalSearch already ran, repeating it does nothing unless regex logic differs.
-    // runTraditionalSearch above includes basic sanitization.
-    // Let's assume empty for now.
+  // Add Anchors to Final
+  topAnchors.forEach(r => {
+    if (!includedIds.has(r.id)) {
+      finalResults.push(r);
+      includedIds.add(r.id);
+    }
+  });
+
+  // 3. PHASE 2: TAG HARVEST
+  const harvestedTags = new Set<string>();
+  finalResults.forEach(r => {
+    if (Array.isArray(r.tags)) r.tags.forEach((t: any) => harvestedTags.add(String(t)));
+    if (Array.isArray(r.buckets)) r.buckets.forEach((b: any) => harvestedTags.add(String(b)));
+  });
+
+  // 4. PHASE 3: NEIGHBOR WALK
+  let neighbors: SearchResult[] = [];
+  if (harvestedTags.size > 0 && phase3Target > 0) {
+    console.log(`[Search] Phase 2: Harvested ${harvestedTags.size} tags. Walking...`);
+    neighbors = await neighborWalk(Array.from(harvestedTags), includedIds, phase3Target);
   }
 
-  // Provenance Boosting logic
-  results = results.map(r => {
-    let score = r.score;
+  // Provenance Boost Neighbors and Add
+  neighbors.forEach(r => {
+    if (provenance === 'sovereign' && r.provenance === 'sovereign') r.score *= 1.5;
 
-    if (provenance === 'sovereign') {
-      if (r.provenance === 'sovereign') {
-        score *= 3.0;
-      } else {
-        score *= 0.5;
-      }
-    } else if (provenance === 'external') {
-      if (r.provenance !== 'sovereign') {
-        score *= 1.5;
-      }
-    } else {
-      if (r.provenance === 'sovereign') score *= 2.0;
+    if (!includedIds.has(r.id)) {
+      finalResults.push(r);
+      includedIds.add(r.id);
     }
-
-    return { ...r, score };
   });
 
-  return formatResults(results, maxChars);
+  console.log(`[Search] Results: ${finalResults.length} (Anchors: ${anchorResults.length}, Neighbors: ${neighbors.length})`);
+
+  // Final Sort by Score
+  finalResults.sort((a, b) => b.score - a.score);
+
+  return formatResults(finalResults, maxChars);
 }
 
 // Helper for FTS
@@ -195,32 +227,32 @@ export async function runTraditionalSearch(query: string, buckets: string[]): Pr
   if (!sanitizedQuery) return [];
 
   let queryCozo = '';
-  // Use multiline query format that matched test_fts_simple
+  // Use single-line query format to avoid parser issues
   if (buckets.length > 0) {
-    // queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] :=
-    //       ~memory:content_fts{id | query: $q, k: 500, bind_score: score},
-    //       *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
-    //       length(intersection(buckets, $buckets)) > 0`;
-    queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] := *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, score = 1.0`;
-
+    queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] := ~memory:content_fts{id | query: $q, k: 500, bind_score: score}, *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, length(intersection(buckets, $buckets)) > 0`;
   } else {
-    // queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] :=
-    //       ~memory:content_fts{id | query: $q, k: 500, bind_score: score},
-    //       *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}`;
-    queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] := *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, score = 1.0`;
+    queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] := ~memory:content_fts{id | query: $q, k: 500, bind_score: score}, *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}`;
   }
 
   try {
-    console.log('[Search] FTS Query:', queryCozo);
-    let result = await db.run(queryCozo, { q: sanitizedQuery, buckets });
+    const result = await db.run(queryCozo, { q: sanitizedQuery, buckets });
 
     if (!result.rows) return [];
+
     return result.rows.map((row: any[]) => ({
-      id: row[0], content: row[2], source: row[3], timestamp: row[4], buckets: row[5], tags: row[6], epochs: row[7], provenance: row[8], score: row[1]
+      id: row[0],
+      score: row[1],
+      content: row[2],
+      source: row[3],
+      timestamp: row[4],
+      buckets: row[5],
+      tags: row[6],
+      epochs: row[7],
+      provenance: row[8]
     }));
 
   } catch (e) {
-    console.error('FTS/Fallback failed', e);
+    console.error('[Search] FTS failed', e);
     return [];
   }
 }
@@ -247,7 +279,8 @@ function formatResults(results: SearchResult[], maxChars: number): { context: st
     context: rollingContext.prompt || 'No results found.',
     results: sortedResults,
     toAgentString: () => {
-      return sortedResults.map(r => `[${r.provenance}] ${r.source}: ${r.content.substring(0, 200)}...`).join('\n');
+      // Safe substring in case content is missing (though our types enforce it)
+      return sortedResults.map(r => `[${r.provenance}] ${r.source}: ${(r.content || "").substring(0, 200)}...`).join('\n');
     },
     metadata: rollingContext.stats
   };

@@ -69,10 +69,8 @@ const SearchPage = () => {
           query,
           // buckets: ['notebook'], // Removed to allow global search (inbox, journals, etc.)
           max_chars: tokenBudget * 4, // Approx chars
-          token_budget: tokenBudget // For backend slicer if supported
-          // TODO: Pass sovereign_bias if API supports it (currently logic is hardcoded in search.ts or query params?)
-          // Search.ts checks 'provenance' column but boost hardcoded? 
-          // We'll update backend later to respect param if needed, but Specs said "Toggle Switch"
+          token_budget: tokenBudget, // For backend slicer if supported
+          provenance: sovereignBias ? 'sovereign' : 'all'
         })
       });
 
