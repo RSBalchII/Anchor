@@ -7,13 +7,26 @@ let llama: any = null;
 let model: LlamaModel | null = null;
 let context: LlamaContext | null = null;
 let session: LlamaChatSession | null = null;
-let embeddingContext: LlamaEmbeddingContext | null = null; // Dedicated for embeddings
+let embeddingContext: LlamaEmbeddingContext | null = null;
+let currentSequence: any = null;
 
 async function init() {
+    if (llama) return;
     try {
-        llama = await getLlama();
+        const systemForceCpu = process.env['LLM_GPU_LAYERS'] === '0';
+
+        if (systemForceCpu) {
+            console.log("[Worker] Global CPU-only mode detected. Disabling GPU backends.");
+            llama = await getLlama({
+                gpu: { type: 'auto', exclude: ['cuda', 'vulkan', 'metal'] }
+            });
+        } else {
+            console.log("[Worker] Initializing Llama with hardware acceleration support.");
+            llama = await getLlama();
+        }
         parentPort?.postMessage({ type: 'ready' });
     } catch (error: any) {
+        console.error("[Worker] Initialization Error:", error);
         parentPort?.postMessage({ type: 'error', error: error.message });
     }
 }
@@ -34,50 +47,50 @@ parentPort?.on('message', async (message) => {
             case 'getEmbeddings':
                 await handleGetEmbeddings(message.data);
                 break;
-
             case 'dispose':
                 await handleDispose();
                 break;
         }
     } catch (error: any) {
+        console.error("[Worker] Message Handling Error:", error);
         parentPort?.postMessage({ type: 'error', error: error.message });
     }
 });
 
-// ... (handleLoadModel, handleChat existing code)
 async function handleLoadModel(data: { modelPath: string, options: any }) {
     if (!llama) await init();
 
-    if (model) {
-        try { await model.dispose(); } catch (e) { }
-    }
-    if (context) {
-        try { await context.dispose(); } catch (e) { }
-    }
-    if (embeddingContext) {
-        try { await embeddingContext.dispose(); } catch (e) { }
-    }
+    // Cleanup existing
+    if (session) { session.dispose(); session = null; }
+    if (currentSequence) { currentSequence.dispose(); currentSequence = null; }
+    if (context) { await context.dispose(); context = null; }
+    if (embeddingContext) { await embeddingContext.dispose(); embeddingContext = null; }
+    if (model) { await model.dispose(); model = null; }
 
     try {
+        console.log(`[Worker] Loading model: ${data.modelPath} (gpuLayers: ${data.options.gpuLayers || 0})`);
         model = await llama.loadModel({
             modelPath: data.modelPath,
             gpuLayers: data.options.gpuLayers || 0
         });
 
+        const ctxSize = data.options.ctxSize || 4096;
+        console.log(`[Worker] Creating context: ${ctxSize} tokens`);
         context = await model!.createContext({
-            contextSize: data.options.contextSize || 4096,
-            batchSize: data.options.contextSize || 4096
+            contextSize: ctxSize,
+            batchSize: Math.min(ctxSize, 512),
+            sequences: 4
         });
 
         // Initialize dedicated embedding context
-        // Critical: If this fails, we must fail the model load so the provider knows.
         embeddingContext = await model!.createEmbeddingContext({
-            contextSize: data.options.contextSize || 2048,
-            batchSize: data.options.contextSize || 2048
+            contextSize: 2048,
+            batchSize: 512
         });
 
+        currentSequence = context.getSequence();
         session = new LlamaChatSession({
-            contextSequence: context!.getSequence(),
+            contextSequence: currentSequence,
             systemPrompt: data.options.systemPrompt || "You are a helpful assistant."
         });
 
@@ -88,20 +101,39 @@ async function handleLoadModel(data: { modelPath: string, options: any }) {
 }
 
 async function handleChat(data: { prompt: string, options: any }) {
-    if (!session) throw new Error("Session not initialized");
+    if (!context) throw new Error("Context not initialized");
+
+    if (data.options.systemPrompt || !session) {
+        if (session) session.dispose();
+        if (currentSequence) currentSequence.dispose();
+
+        currentSequence = context.getSequence();
+        session = new LlamaChatSession({
+            contextSequence: currentSequence,
+            systemPrompt: data.options.systemPrompt || "You are a helpful assistant."
+        });
+    }
+
+    console.log(`[Worker] Chat Request: ${data.prompt.length} chars. Generating response...`);
+    let tokensReceived = 0;
 
     const response = await session.prompt(data.prompt, {
         temperature: data.options.temperature || 0.7,
-        maxTokens: data.options.maxTokens || 1024
+        maxTokens: data.options.maxTokens || 1024,
+        onToken: () => {
+            tokensReceived++;
+            if (tokensReceived % 20 === 0) {
+                console.log(`[Worker] Activity Heartbeat: Generated ${tokensReceived} tokens...`);
+            }
+        }
     });
 
+    console.log(`[Worker] Chat Completed. Response: ${response.length} chars.`);
     parentPort?.postMessage({ type: 'chatResponse', data: response });
 }
 
-// Handler for Single Embedding
 async function handleGetEmbedding(data: { text: string }) {
     if (!embeddingContext) throw new Error("Embedding Context not initialized");
-
     try {
         const embedding = await embeddingContext.getEmbeddingFor(data.text);
         parentPort?.postMessage({ type: 'embeddingResponse', data: Array.from(embedding.vector) });
@@ -110,33 +142,17 @@ async function handleGetEmbedding(data: { text: string }) {
     }
 }
 
-// Handler for Batch Embeddings
 async function handleGetEmbeddings(data: { texts: string[] }) {
     if (!embeddingContext) throw new Error("Embedding Context not initialized");
-
     try {
-        // console.log(`[Worker] Processing batch of ${data.texts?.length} texts`);
-        if (!data.texts || !Array.isArray(data.texts)) {
-            throw new Error("Invalid data.texts: expected array");
-        }
-
         const embeddings: number[][] = [];
-        for (let i = 0; i < data.texts.length; i++) {
-            const text = data.texts[i];
-            try {
-                if (typeof text !== 'string') {
-                    console.error(`[Worker] Invalid text at index ${i}:`, text);
-                    embeddings.push([]); // Push empty embedding for invalid input
-                    continue;
-                }
-                const embedding = await embeddingContext.getEmbeddingFor(text);
-                embeddings.push(Array.from(embedding.vector));
-            } catch (innerErr: any) {
-                console.error(`[Worker] Failed to embed text at index ${i} ("${text?.substring(0, 20)}..."): ${innerErr.message}`);
-                // Fallback: push zero vector or empty (handled by refiner)
-                // Based on refiner logic: if (batchEmbeddings && batchEmbeddings[j] && batchEmbeddings[j].length > 0)
+        for (const text of data.texts) {
+            if (typeof text !== 'string') {
                 embeddings.push([]);
+                continue;
             }
+            const embedding = await embeddingContext.getEmbeddingFor(text);
+            embeddings.push(Array.from(embedding.vector));
         }
         parentPort?.postMessage({ type: 'embeddingsGenerated', data: embeddings });
     } catch (e: any) {
@@ -145,12 +161,12 @@ async function handleGetEmbeddings(data: { texts: string[] }) {
 }
 
 async function handleDispose() {
-    if (session) session.dispose();
-    if (context) await context.dispose();
-    if (embeddingContext) await embeddingContext.dispose();
+    if (session) { session.dispose(); session = null; }
+    if (currentSequence) { currentSequence.dispose(); currentSequence = null; }
+    if (context) { await context.dispose(); context = null; }
+    if (embeddingContext) { await embeddingContext.dispose(); embeddingContext = null; }
     if (model) await model.dispose();
     parentPort?.postMessage({ type: 'disposed' });
 }
 
-// Start init
 init();

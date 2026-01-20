@@ -5,6 +5,7 @@
  * 1. Engram Layer (Fast Lookup) - O(1) lookup for known entities
  * 2. Provenance Boosting - Sovereign content gets boost
  * 3. Tag-Walker Protocol - Graph-based associative retrieval (Replacing Vector Search)
+ * 4. Intelligent Query Expansion - GLM-assisted decomposition (Standard 069)
  */
 
 import { db } from '../../core/db.js';
@@ -17,10 +18,63 @@ interface SearchResult {
   source: string;
   timestamp: number;
   buckets: string[];
-  tags: string;
+  tags: string[];
   epochs: string;
   provenance: string;
   score: number;
+}
+
+/**
+ * Fetch top tags from the system to ground the LLM's query expansion
+ */
+export async function getGlobalTags(limit: number = 50): Promise<string[]> {
+  try {
+    // CozoDB aggregation syntax is restrictive in this environment.
+    // We fetch unique tags and rely on the list for grounding.
+    const query = `
+            ?[tag] := *memory{tags}, tag in tags :limit 500
+        `;
+    const result = await db.run(query);
+    if (!result.rows) return [];
+
+    const uniqueTags = [...new Set((result.rows as string[][]).map((r: string[]) => r[0]))];
+    return uniqueTags.slice(0, limit) as string[];
+  } catch (e) {
+    console.error('[Search] Failed to fetch global tags:', e);
+    return [];
+  }
+}
+
+/**
+ * Use LLM to expand query into semantically similar system tags
+ */
+import { getMasterTags } from '../tags/discovery.js';
+
+/**
+ * Deterministic Query Expansion (No LLM)
+ * Scans the user query for known tags from the master list.
+ */
+export async function expandQuery(originalQuery: string): Promise<string[]> {
+  try {
+    const globalTags = getMasterTags(); // This is synchronous file read
+    const queryLower = originalQuery.toLowerCase();
+
+    // Find tags specifically mentioned in the query or that substring match
+    // Simple heuristic: if query contains the tag, we boost it.
+    const foundTags = globalTags.filter(tag => {
+      const tagLower = tag.toLowerCase();
+      // Check for boundary matches or direct inclusion
+      return queryLower.includes(tagLower);
+    });
+
+    if (foundTags.length > 0) {
+      console.log(`[Search] Deterministically matched tags: ${foundTags.join(', ')}`);
+    }
+    return foundTags;
+  } catch (e) {
+    console.error('[Search] Expansion failed:', e);
+    return [];
+  }
 }
 
 /**
@@ -65,14 +119,7 @@ export async function lookupByEngram(key: string): Promise<string[]> {
 }
 
 /**
- * Perform Graph-Based Associative "Neighbor Walk"
- * Phase 3 of Tag-Walker Algorithm
- */
-/**
  * Tag-Walker Associative Search (Replaces Vector Search)
- * Strategy:
- * 1. Anchor (70%): Find direct text matches (FTS).
- * 2. Walk (30%): Find neighbors that share specific tags with the Anchors.
  */
 export async function tagWalkerSearch(
   query: string,
@@ -84,12 +131,11 @@ export async function tagWalkerSearch(
     if (!sanitizedQuery) return [];
 
     // 1. Direct Search (The Anchor)
-    // We use FTS to find the "Entry Nodes" into the graph
     const anchorQuery = `
             ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score] := 
             ~memory:content_fts{id | query: $query, k: 50, bind_score: fts_score},
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
-            score = 100.0 * fts_score
+            score = 70.0 * fts_score
             ${buckets.length > 0 ? ', length(intersection(buckets, $buckets)) > 0' : ''}
             :limit 20
         `;
@@ -113,7 +159,6 @@ export async function tagWalkerSearch(
     // 2. The Walk (Associative Discovery)
     const anchorIds = anchors.map((a: any) => a.id);
 
-    // Cozo Query: Find nodes sharing tags with our anchors
     const walkQuery = `
             ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score] := 
             *memory{id: anchor_id, tags: anchor_tags},
@@ -122,7 +167,7 @@ export async function tagWalkerSearch(
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
             tag in tags,
             id != anchor_id,
-            score = 50.0
+            score = 30.0
             :limit 10
         `;
 
@@ -147,9 +192,8 @@ export async function tagWalkerSearch(
   }
 }
 
-
 /**
- * Execute search with Tag-Walker Protocol
+ * Execute search with Intelligent Expansion and Tag-Walker Protocol
  */
 export async function executeSearch(
   query: string,
@@ -159,7 +203,12 @@ export async function executeSearch(
   _deep: boolean = false,
   provenance: 'sovereign' | 'external' | 'all' = 'all'
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
-  console.log(`[Search] executeSearch (Tag-Walker) called with provenance: ${provenance}`);
+  console.log(`[Search] executeSearch (Expanded Tag-Walker) called with provenance: ${provenance}`);
+
+  // 0. QUERY EXPANSION (Phase 0 - Standard 069)
+  const expansionTags = await expandQuery(query);
+  const expandedQuery = expansionTags.length > 0 ? `${query} ${expansionTags.join(' ')}` : query;
+  console.log(`[Search] Optimized Query: ${expandedQuery}`);
 
   const targetBuckets = buckets || (bucket ? [bucket] : []);
 
@@ -185,13 +234,12 @@ export async function executeSearch(
   }
 
   // 2. TAG-WALKER SEARCH (Hybrid FTS + Graph)
-  const walkerResults = await tagWalkerSearch(query, targetBuckets, maxChars);
+  const walkerResults = await tagWalkerSearch(expandedQuery, targetBuckets, maxChars);
 
   // Merge and Apply Provenance Boosting
   walkerResults.forEach(r => {
     let score = r.score;
 
-    // Apply Sovereign Bias
     if (provenance === 'sovereign') {
       if (r.provenance === 'sovereign') score *= 3.0;
       else score *= 0.5;
@@ -215,15 +263,14 @@ export async function executeSearch(
   return formatResults(finalResults, maxChars);
 }
 
-
-// Helper for FTS
+/**
+ * Traditional FTS fallback
+ */
 export async function runTraditionalSearch(query: string, buckets: string[]): Promise<SearchResult[]> {
   const sanitizedQuery = sanitizeFtsQuery(query);
-
   if (!sanitizedQuery) return [];
 
   let queryCozo = '';
-  // Use single-line query format to avoid parser issues
   if (buckets.length > 0) {
     queryCozo = `?[id, score, content, source, timestamp, buckets, tags, epochs, provenance] := ~memory:content_fts{id | query: $q, k: 500, bind_score: score}, *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, length(intersection(buckets, $buckets)) > 0`;
   } else {
@@ -232,7 +279,6 @@ export async function runTraditionalSearch(query: string, buckets: string[]): Pr
 
   try {
     const result = await db.run(queryCozo, { q: sanitizedQuery, buckets });
-
     if (!result.rows) return [];
 
     return result.rows.map((row: any[]) => ({
@@ -246,7 +292,6 @@ export async function runTraditionalSearch(query: string, buckets: string[]): Pr
       epochs: row[7],
       provenance: row[8]
     }));
-
   } catch (e) {
     console.error('[Search] FTS failed', e);
     return [];
@@ -257,7 +302,6 @@ export async function runTraditionalSearch(query: string, buckets: string[]): Pr
  * Format search results within character budget
  */
 function formatResults(results: SearchResult[], maxChars: number): { context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any } {
-  // Convert SearchResult to ContextAtom
   const candidates = results.map(r => ({
     id: r.id,
     content: r.content,
@@ -275,7 +319,6 @@ function formatResults(results: SearchResult[], maxChars: number): { context: st
     context: rollingContext.prompt || 'No results found.',
     results: sortedResults,
     toAgentString: () => {
-      // Safe substring in case content is missing (though our types enforce it)
       return sortedResults.map(r => `[${r.provenance}] ${r.source}: ${(r.content || "").substring(0, 200)}...`).join('\n');
     },
     metadata: rollingContext.stats

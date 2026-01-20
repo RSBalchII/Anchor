@@ -13,8 +13,16 @@ let currentOrchestratorModelName = "";
 // ESM __dirname fix
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CHAT_WORKER_PATH = path.resolve(__dirname, '../../core/inference/ChatWorker.js');
-const HYBRID_WORKER_PATH = path.resolve(__dirname, '../../core/inference/llamaLoaderWorker.js');
+
+// Helper to resolve worker path dynamically based on environment (src vs dist)
+function resolveWorkerPath(relativePath: string) {
+  const isDev = __dirname.includes('src');
+  const ext = isDev ? '.ts' : '.js';
+  return path.resolve(__dirname, relativePath + ext);
+}
+
+const CHAT_WORKER_PATH = resolveWorkerPath('../../core/inference/ChatWorker');
+const HYBRID_WORKER_PATH = resolveWorkerPath('../../core/inference/llamaLoaderWorker');
 
 export interface LoadModelOptions {
   ctxSize?: number;
@@ -140,6 +148,7 @@ export async function loadModel(modelPath: string, options: LoadModelOptions = {
         targetWorker!.off('message', handler);
         if (target === 'chat') chatLoadingPromise = null;
         else orchLoadingPromise = null;
+        console.error(`[Provider] Worker ${target} Error:`, msg.error);
         reject(new Error(msg.error));
       }
     };
@@ -179,10 +188,13 @@ export async function runSideChannel(prompt: string, systemInstruction = "You ar
 
   if (!targetWorker || !targetModel) throw new Error("Orchestrator/Chat Model failed to load.");
 
+  console.log(`[Provider] SideChannel: Prompting ${targetModel} (${prompt.length} chars)...`);
+
   return new Promise((resolve, _reject) => {
     const handler = (msg: any) => {
       if (msg.type === 'chatResponse') {
         targetWorker?.off('message', handler);
+        console.log(`[Provider] SideChannel: Response received (${msg.data?.length || 0} chars)`);
         resolve(msg.data);
       } else if (msg.type === 'error') {
         targetWorker?.off('message', handler);

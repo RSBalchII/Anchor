@@ -146,70 +146,86 @@ export async function dream(): Promise<{ status: string; analyzed?: number; upda
 
     const totalBatches = Math.ceil(memoriesToAnalyze.length / batchSize);
     await processInBatches(memoriesToAnalyze, async (batch: any[], batchIndex: number) => {
+      const batchStartTime = Date.now();
       if ((batchIndex + 1) % 5 === 0 || batchIndex === 0 || batchIndex === totalBatches - 1) {
         console.log(`[Dreamer] Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} memories)...`);
       }
 
+      // 1. Prepare updates mapping in memory
+      const updatesMap = new Map<string, string[]>();
       for (const row of batch) {
         const [id, _content, currentBuckets, timestamp] = row;
+        const temporalTags = generateTemporalTags(timestamp);
 
-        try {
-          // Generate temporal tags
-          const temporalTags = generateTemporalTags(timestamp);
+        let newSemanticTags: string[] = [];
+        const meaningfulBuckets = (currentBuckets || []).filter((b: string) =>
+          !['core', 'pending'].includes(b) && !/^\d{4}$/.test(b)
+        );
 
-          // Only call LLM for semantic tags if we don't have rich tags yet
-          let newSemanticTags: string[] = [];
-          const meaningfulBuckets = (currentBuckets || []).filter((b: string) =>
-            !['core', 'pending'].includes(b) && !/^\d{4}$/.test(b) // Exclude years
-          );
-
-          if (meaningfulBuckets.length < 2) {
-            newSemanticTags = ['semantic_tag_placeholder'];
-          }
-
-          // Combine tags: Old + Semantic + Temporal
-          const combinedBuckets = [
-            ...new Set([
-              ...(currentBuckets || []),
-              ...newSemanticTags,
-              ...temporalTags
-            ])
-          ];
-
-          // Cleanup: Remove generic tags if we have specific ones
-          let finalBuckets = [...combinedBuckets];
-          if (combinedBuckets.length > 1) {
-            const specificBuckets = combinedBuckets.filter((b: string) =>
-              !['core', 'pending', 'misc', 'general', 'other', 'unknown', 'inbox'].includes(b)
-            );
-            if (specificBuckets.length > 0) {
-              finalBuckets = specificBuckets;
-            }
-          }
-
-          // Update the memory with new buckets
-          const updateQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}, id = $id`;
-          const currentResult = await db.run(updateQuery, { id });
-
-          if (currentResult.rows && currentResult.rows.length > 0) {
-            const [_, ts, cont, src, srcId, seq, typ, hash, __, tag, epoch, prov, emb] = currentResult.rows[0];
-
-            // Delete old record
-            await db.run(`?[id] <- [[$id]] :delete memory {id}`, { id });
-
-            // Insert updated record with ALL columns
-            await db.run(
-              `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}`,
-              { data: [[id, ts, cont, src, srcId, seq, typ, hash, finalBuckets, tag, epoch, prov, emb]] }
-            );
-
-            updatedCount++;
-          }
-        } catch (error: any) {
-          console.error(`🌙 Dreamer: Failed to process memory ${id}:`, error.message);
+        if (meaningfulBuckets.length < 2) {
+          newSemanticTags = ['semantic_tag_placeholder'];
         }
+
+        const combinedBuckets = [...new Set([...(currentBuckets || []), ...newSemanticTags, ...temporalTags])];
+        let finalBuckets = [...combinedBuckets];
+        if (combinedBuckets.length > 1) {
+          const specificBuckets = combinedBuckets.filter((b: string) =>
+            !['core', 'pending', 'misc', 'general', 'other', 'unknown', 'inbox'].includes(b)
+          );
+          if (specificBuckets.length > 0) {
+            finalBuckets = specificBuckets;
+          }
+        }
+        updatesMap.set(id, finalBuckets);
+      }
+
+      // 2. Bulk fetch full data for the batch
+      const flatIds = batch.map(r => r[0]);
+      const fetchQuery = `
+        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] :=
+        id in $flatIds,
+        *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+      `;
+      const fullDataResult = await db.run(fetchQuery, { flatIds });
+
+      if (fullDataResult.rows && fullDataResult.rows.length > 0) {
+        const finalUpdateData = fullDataResult.rows.map((row: any) => {
+          const id = row[0];
+          const newBuckets = updatesMap.get(id);
+          const updatedRow = [...row];
+          updatedRow[8] = newBuckets; // index 8 is buckets
+          return updatedRow;
+        });
+
+        // 3. Bulk Update
+        await db.run(`
+          ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
+          :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+        `, { data: finalUpdateData });
+
+        updatedCount += finalUpdateData.length;
+      }
+
+      const batchDuration = Date.now() - batchStartTime;
+      const rate = Math.round((batch.length / (batchDuration / 1000)) * 10) / 10;
+      if (batchDuration > 500) {
+        console.log(`[Dreamer] Batch ${batchIndex + 1}/${totalBatches} completed in ${batchDuration}ms (${rate} items/sec)`);
       }
     }, { batchSize });
+
+    // PHASE 21: Tag Infection Protocol (Standard 068)
+    try {
+      console.log('🌙 Dreamer: Running Tag Infection cycle...');
+      const { runDiscovery } = await import('../tags/discovery.js');
+      const { runInfectionLoop } = await import('../tags/infector.js');
+
+      // 1. Teacher learns from a sample
+      await runDiscovery(30);
+      // 2. Student infects the entire graph
+      await runInfectionLoop();
+    } catch (infectionError: any) {
+      console.error('🌙 Dreamer: Tag Infection failed:', infectionError.message);
+    }
 
     // NEW: The Abstraction Pyramid - Cluster and Summarize into Episodes/Epochs
     await clusterAndSummarize();
@@ -285,51 +301,62 @@ async function clusterAndSummarize(): Promise<void> {
     if (currentCluster.length > 0) clusters.push(currentCluster);
 
     // 3. Process Clusters -> Episodes (Level 2)
+    console.log(`🌙 Dreamer: Processing ${clusters.length} temporal clusters...`);
+    let clusterIndex = 0;
     for (const cluster of clusters) {
-      if (cluster.length < 3) continue; // Skip tiny clusters for now, wait for more context? 
+      clusterIndex++;
+      if (cluster.length < 3) continue; // Skip tiny clusters for now, wait for more context?
       // Or just summarize them if they are old enough?
       // For now, let's process clusters of size >= 3.
 
       console.log(`🌙 Dreamer: Summarizing cluster of ${cluster.length} atoms...`);
 
-      // Iterative Summarization (Map-Reduce)
       let runningSummary = "";
+      // 3. Process Clusters -> Episodes (Level 2)
+      // We bundle atoms in the cluster into larger chunks for summarization to save LLM calls
+      // CPU-Optimization: Reduced from 25 to 5 to prevent hour-long pre-fill times.
+      const CHUNK_SIZE = 5;
 
-      // Map: Read Atoms
-      // Reduce: Summarize (Prev + Next)
+      for (let i = 0; i < cluster.length; i += CHUNK_SIZE) {
+        const subBatch = cluster.slice(i, i + CHUNK_SIZE);
+        const batchContent = subBatch.map(a => `- ${String(a.content).substring(0, 300)}`).join('\n');
 
-      for (let i = 0; i < cluster.length; i++) {
-        const atom = cluster[i];
-        const content = String(atom.content);
-
-        // If we have a running summary, combine it.
+        let prompt = "";
         if (runningSummary) {
-          // Reduce Step
-          const prompt = `
-                    Current Episode Summary: "${runningSummary}"
-                    
-                    Next Event: "${content}"
-                    
-                    Update the summary to include the new event naturally.Keep it concise.
-                    `;
-          const updated = (await runSideChannel(prompt)) as string;
-          if (updated) runningSummary = updated;
-          else runningSummary += `\n${content} `; // Fallback
+          prompt = `
+            Current Episode Summary: "${runningSummary}"
+            
+            New related events to incorporate:
+            ${batchContent}
+            
+            Update the summary to include these new events naturally. Keep it concise, one paragraph only.
+          `;
         } else {
-          // Start
-          runningSummary = content;
-          // Initial summarization if first chunk is huge?
-          if (content.length > 500) {
-            const initialFix = (await runSideChannel(`Summarize this event concisely: ${content} `)) as string;
-            if (initialFix) runningSummary = initialFix;
+          prompt = `
+            Summarize the following sequence of related events into a concise, one-paragraph episode summary.
+            Events:
+            ${batchContent}
+          `;
+        }
+
+        try {
+          const updated = (await runSideChannel(prompt, "You are an expert historian specializing in concise event summarization.")) as string;
+          if (updated) {
+            runningSummary = updated.trim();
+          } else if (!runningSummary) {
+            runningSummary = String(subBatch[0].content).substring(0, 500); // Minimum fallback
           }
+        } catch (e) {
+          console.warn('[Dreamer] Mid-cluster summarization LLM failure, using fallback.');
+          if (!runningSummary) runningSummary = String(subBatch[0].content).substring(0, 500);
+          runningSummary += `\n(Next part processed with partial context due to error)`;
         }
       }
 
       // Create Episode Node (Level 2)
       const crypto = await import('crypto');
       const summaryHash = crypto.createHash('sha256').update(runningSummary).digest('hex');
-      const episodeId = `ep_${summaryHash.substring(0, 16)} `;
+      const episodeId = `ep_${summaryHash.substring(0, 16)}`;
       const startTime = cluster[0].timestamp;
       const endTime = cluster[cluster.length - 1].timestamp;
 

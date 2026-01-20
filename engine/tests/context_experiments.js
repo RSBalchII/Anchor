@@ -1,6 +1,6 @@
 /**
  * Context Experiments - Verification Script
- * 
+ *
  * Verifies the "UniversalRAG" pipeline:
  * 1. Vector Search (Semantic Retrieval)
  * 2. Context Assembly (Markovian + Graph-R1 simulation)
@@ -37,7 +37,7 @@ async function runExperiments() {
         // Manual HNSW search query simulation
         // (Note: HNSW index creation is disabled in db.ts, so this checks the linear scan fallback or basic query)
         const vecQuery = `
-            ?[id, distance] := *memory{id, embedding}, 
+            ?[id, distance] := *memory{id, embedding},
             distance = cosine_dist(embedding, $queryVec),
             distance < 0.2
             :sort distance
@@ -81,15 +81,22 @@ async function runExperiments() {
         // For now, listing available sources is a good proxy for "Graph Nodes"
         const sourceQuery = `?[path, total_atoms] := *source{path, total_atoms}`;
         const sources = await db.run(sourceQuery);
-        console.log(`\n[Graph Sources] Found ${sources.rows ? sources.rows.length : 0}:`);
-        if (sources.rows) {
-            sources.rows.forEach(r => console.log(`- ${r[0]} (${r[1]} atoms)`));
+        console.log(`\n[Sources Check] Available Sources: ${sources.rows ? sources.rows.length : 0}`);
+        if (sources.rows && sources.rows.length > 0) {
+            console.log('✅ Sources Table Working');
+            sources.rows.slice(0, 3).forEach(row => {
+                console.log(`  - ${row[0]} (${row[1]} atoms)`);
+            });
+        } else {
+            console.log('⚠️  No sources found, but that\'s OK if no data has been ingested yet.');
         }
 
-    } catch (e) {
-        console.error('❌ Experiment Failed:', e);
-    } finally {
-        await db.close();
+        console.log('\n🎉 Context Experiments Complete!');
+        console.log('✅ CozoDB Integration Verified');
+        
+    } catch (error) {
+        console.error('❌ Context Experiments Failed:', error.message);
+        process.exit(1);
     }
 }
 

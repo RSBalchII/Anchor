@@ -1,30 +1,49 @@
 /**
  * Database Module for Sovereign Context Engine
- * 
+ *
  * This module manages the CozoDB database connection and provides
  * database operations for the context engine.
  */
 
-import { CozoDb } from 'cozo-node';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const cozoNode = require('cozo-node');
 import { config } from '../config/index.js';
 
 export class Database {
-  private db: CozoDb;
+  private dbId: string | null = null;
 
   constructor() {
-    // Initialize the database with RocksDB persistent backend
-    this.db = new CozoDb('rocksdb', './context.db');
-    console.log('[DB] Initialized with RocksDB backend: ./context.db');
+    // Database connection is now established in init()
   }
 
   /**
    * Initialize the database with required schemas
    */
   async init() {
+    // 0. Initialize the database connection (moved from constructor to prevent import-time crashes)
+    if (this.dbId === null) {
+      try {
+        console.log('[DB] Attempting to open RocksDB backend: ./context.db');
+        this.dbId = cozoNode.open_db('rocksdb', './context.db', {});
+        console.log('[DB] Initialized with RocksDB backend: ./context.db');
+      } catch (e: any) {
+        if (e.message?.includes('lock file') || e.message?.includes('IO error')) {
+          console.error('\n\n[DB] CRITICAL ERROR: Database is LOCKED.');
+          console.error('[DB] This usually means another ECE process is running.');
+          console.error('[DB] Please stop all "node" processes and try again.\n');
+          // We can optionally attempt to force-clear locks here, but it's risky if process is alive.
+          // For now, fail gracefully.
+          throw new Error('Database Locked: ' + e.message);
+        }
+        throw e;
+      }
+    }
+
     // Create the memory table schema
     // We check for existing columns to determine if migration is needed
     try {
-      const result = await this.db.run('::columns memory');
+      const result = await this.run('::columns memory');
       const columns = result.rows.map((r: any) => r[0]);
 
       // Check for Level 1 Atomizer fields
@@ -37,8 +56,8 @@ export class Database {
 
         // 1. Fetch old data into memory (Safe subset of columns)
         // We only fallback to what we know existed in v2
-        const oldDataResult = await this.db.run(`
-          ?[id, timestamp, content, source, provenance] := 
+        const oldDataResult = await this.run(`
+          ?[id, timestamp, content, source, provenance] :=
           *memory{id, timestamp, content, source, provenance}
         `);
 
@@ -47,18 +66,18 @@ export class Database {
         // 2. Drop old indices and table
         try {
           console.log('[DB] Removing indices...');
-          try { await this.db.run('::remove memory:knn'); } catch (e) { }
-          try { await this.db.run('::remove memory:vec_idx'); } catch (e) { } // Legacy
-          try { await this.db.run('::remove memory:content_fts'); } catch (e) { }
+          try { await this.run('::remove memory:knn'); } catch (e) { }
+          try { await this.run('::remove memory:vec_idx'); } catch (e) { } // Legacy
+          try { await this.run('::remove memory:content_fts'); } catch (e) { }
         } catch (e: any) {
           console.log(`[DB] Index removal warning: ${e.message}`);
         }
 
         console.log('[DB] Removing old table...');
-        await this.db.run('::remove memory');
+        await this.run('::remove memory');
 
         // 3. Create new table
-        await this.db.run(`
+        await this.run(`
           :create memory {
             id: String
             =>
@@ -107,7 +126,7 @@ export class Database {
           const chunkSize = 100;
           for (let i = 0; i < newData.length; i += chunkSize) {
             const chunk = newData.slice(i, i + chunkSize);
-            await this.db.run(`
+            await this.run(`
                ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] <- $data
                :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}
              `, { data: chunk });
@@ -121,7 +140,7 @@ export class Database {
         console.log('[DB] Creating memory table from scratch...');
         // Create Memory Table
         try {
-          await this.db.run(`
+          await this.run(`
             :create memory {
                 id: String
                 =>
@@ -141,10 +160,10 @@ export class Database {
         `);
           console.log('Memory table initialized');
 
-          // REMOVED: Vector index (HNSW) is no longer used. Tag-Walker is the primary retrieval method.
+          // REMOVED: Vector index is no longer used. Tag-Walker is the primary retrieval method.
           // Explicitly remove it if it exists to save resources and prevent zero-vector errors.
           try {
-            await this.db.run('::remove memory:knn');
+            await this.run('::remove memory:knn');
             console.log('[DB] Legacy vector index (memory:knn) removed.');
           } catch (e) {
             // Ignore if index doesn't exist
@@ -164,7 +183,7 @@ export class Database {
           console.log('[DB] Index lock detected. Automatically purging corrupted database...');
 
           // Close existing connection
-          try { this.db.close(); } catch (c) { }
+          try { this.close(); } catch (c) { }
 
           // Give OS time to release file locks (Windows is slow)
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -183,7 +202,7 @@ export class Database {
 
           // Re-initialize fresh
           console.log('[DB] Re-initializing fresh database...');
-          this.db = new CozoDb('rocksdb', './context.db');
+          this.dbId = cozoNode.open_db('rocksdb', './context.db', {});
           await this.init(); // Recursive retry
           return;
         }
@@ -193,7 +212,7 @@ export class Database {
 
     // Create Source Table (Container)
     try {
-      await this.db.run(`
+      await this.run(`
         :create source {
            path: String,
            hash: String,
@@ -205,7 +224,7 @@ export class Database {
 
     // Create Summary Node Table (Level 2/3: Episodes/Epochs)
     try {
-      await this.db.run(`
+      await this.run(`
         :create summary_node {
            id: String,
            type: String,
@@ -219,7 +238,7 @@ export class Database {
 
     // Create Parent_Of Edge Table (Hierarchy)
     try {
-      await this.db.run(`
+      await this.run(`
         :create parent_of {
            parent_id: String,
            child_id: String,
@@ -230,7 +249,7 @@ export class Database {
 
     // Create Engram table (Lexical Sidecar)
     try {
-      await this.db.run(`
+      await this.run(`
         :create engrams {
           key: String,
           value: String
@@ -242,7 +261,7 @@ export class Database {
 
     // Create FTS index for content
     try {
-      await this.db.run(`
+      await this.run(`
         ::fts create memory:content_fts {
           extractor: content,
           tokenizer: Simple,
@@ -261,7 +280,9 @@ export class Database {
    */
   async close() {
     // Close the database connection
-    this.db.close();
+    if (this.dbId) {
+      cozoNode.close_db(this.dbId);
+    }
   }
 
   /**
@@ -277,7 +298,10 @@ export class Database {
     }
 
     try {
-      const result = await this.db.run(query, params);
+      if (this.dbId === null) {
+        throw new Error('Database not initialized');
+      }
+      const result = cozoNode.query_db(this.dbId, query, params || {});
       return result;
     } catch (e: any) {
       console.error(`[DB] Query Failed: ${e.message}`);
@@ -290,7 +314,10 @@ export class Database {
    * Run a FTS search query
    */
   async search(query: string) {
-    return await this.db.run(query);
+    if (this.dbId === null) {
+      throw new Error('Database not initialized');
+    }
+    return cozoNode.query_db(this.dbId, query, {});
   }
 }
 

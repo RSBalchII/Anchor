@@ -14,6 +14,10 @@ import yaml from 'js-yaml';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import dotenv from 'dotenv';
+// .env is in the ECE_Core root, 3 levels up from engine/src/config
+dotenv.config({ path: path.join(__dirname, '..', '..', '..', '.env') });
+
 // Define configuration interface
 interface Config {
   // Core
