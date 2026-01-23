@@ -9,11 +9,13 @@ import * as crypto from 'crypto';
 import { db } from '../core/db.js';
 
 // Import services and types
-import { executeSearch } from '../services/search/search.js';
+import { executeSearch, iterativeSearch } from '../services/search/search.js';
 import { dream } from '../services/dreamer/dreamer.js';
 import { getState, clearState } from '../services/scribe/scribe.js';
-import { listModels, loadModel, runSideChannel } from '../services/llm/provider.js';
+import { listModels, loadModel, runStreamingChat } from '../services/llm/provider.js';
 import { createBackup, listBackups, restoreBackup } from '../services/backup/backup.js';
+import { summarizeContext } from '../services/llm/reader.js';
+import { fetchAndProcess, searchWeb } from '../services/research/researcher.js';
 import { SearchRequest } from '../types/api.js';
 
 export function setupRoutes(app: Application) {
@@ -147,30 +149,36 @@ export function setupRoutes(app: Application) {
     }
   });
 
-  // POST Search endpoint (Standard UniversalRAG)
+  // POST Search endpoint (Standard UniversalRAG + Iterative Logic)
   app.post('/v1/memory/search', async (req: Request, res: Response) => {
     try {
       const body = req.body as SearchRequest;
       if (!body.query) {
-        res.status(400).json({ error: 'Query is defined' });
+        res.status(400).json({ error: 'Query is required' });
         return;
       }
 
-      // Map request to executeSearch args
-      const result = await executeSearch(
+      // Handle legacy params
+      const bucketParam = (req.body as any).bucket;
+      const buckets = body.buckets || [];
+      const allBuckets = bucketParam ? [...buckets, bucketParam] : buckets;
+      const budget = (req.body as any).token_budget ? (req.body as any).token_budget * 4 : (body.max_chars || 20000);
+
+      // Use Iterative Back-off Search Strategy
+      const result = await iterativeSearch(
         body.query,
-        undefined,
-        body.buckets,
-        body.max_chars || 5000,
-        body.deep || false,
-        body.provenance || 'all'
+        allBuckets,
+        budget
       );
 
       // Construct standard response
+      console.log(`[API] Search "${body.query}" -> Found ${result.results.length} results (Attempt ${result.attempt})`);
+
       res.status(200).json({
         status: 'success',
         context: result.context,
         results: result.results,
+        attempt: result.attempt, // Report which strategy worked
         metadata: {
           engram_hits: 0,
           vector_latency: 0,
@@ -283,6 +291,44 @@ export function setupRoutes(app: Application) {
     }
   });
 
+  // Research Plugin Endpoint
+  app.post('/v1/research/scrape', async (req: Request, res: Response) => {
+    try {
+      const { url, category } = req.body;
+      if (!url) {
+        res.status(400).json({ error: 'URL required' });
+        return;
+      }
+
+      const result = await fetchAndProcess(url, category || 'article');
+      if (result.success) {
+        res.status(200).json(result);
+      } else {
+        res.status(500).json(result);
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Web Search Endpoint
+  app.get('/v1/research/web-search', async (req: Request, res: Response) => {
+    try {
+      const q = req.query['q'] as string;
+      if (!q) {
+        res.status(400).json({ error: 'Query required' });
+        return;
+      }
+
+      const results = await searchWeb(q);
+      res.status(200).json(results);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+
+
   // LLM: List Models
   app.get('/v1/models', async (req: Request, res: Response) => {
     try {
@@ -317,46 +363,156 @@ export function setupRoutes(app: Application) {
     }
   });
 
-  // LLM: Chat Completions (SSE Streaming)
+  // LLM: Chat Completions (Real Streaming + Reasoning Loop)
   app.post('/v1/chat/completions', async (req: Request, res: Response) => {
     try {
-      const { messages, options } = req.body;
-      const lastMsg = messages[messages.length - 1];
-      const prompt = lastMsg.content;
+      const { messages, temperature = 0.7, max_tokens = 2048 } = req.body;
 
+      // 1. Setup SSE
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
 
-      const fullResponse = (await runSideChannel(prompt, "You are a helpful AI.", options)) as string | null;
+      // 2. Inject System Prompt
+      let systemContent = `You are an intelligent assistant connected to a Sovereign Context Engine.
+You have access to a semantic database.
+To search for information, output a search query wrapped in tags like this: <search budget="5000">your query here</search>.
+The 'budget' attribute (optional, default 5000) controls the max characters of context to retrieve. Use higher budget (e.g. 10000) for broad research, lower (e.g. 2000) for specific facts.
+Stop generating after outputting the tag.
+When you receive the search results, answer the user's question using that information.`;
 
-      if (!fullResponse) {
-        res.write(`data: ${JSON.stringify({ error: "No response from model" })}\n\n`);
-        res.end();
-        return;
+      // --- LOGIC LOOP START ---
+      // Deterministic "Code-First" Search before the model thinks
+      const userMsg = messages[messages.length - 1];
+      if (userMsg.role === 'user') {
+        // Stream "Thinking" / Logic events
+        res.write(`data: ${JSON.stringify({ type: 'tool', status: 'searching', query: userMsg.content, budget: 'Auto' })}\n\n`);
+
+        // 1. Iterative Search (Back-off)
+        const searchRes = await iterativeSearch(userMsg.content, [], 20000); // High budget for retrieval
+
+        if (searchRes.results.length > 0) {
+          const foundMsg = `Found ${searchRes.results.length} memories (Attempt ${searchRes.attempt}). Reading...`;
+          res.write(`data: ${JSON.stringify({ type: 'tool_result', content: foundMsg, full_context: '[Reading Context...]' })}\n\n`);
+
+          // 2. Summary (Reader Service)
+          const summary = await summarizeContext(searchRes.results, userMsg.content);
+
+          // Inject Summary
+          systemContent += `\n\nCONTEXT SUMMARY:\n${summary}\n\n(This context was automatically retrieved and summarized. Use it to answer the user.)`;
+
+          // Stream Summary to UI (Visible to User)
+          res.write(`data: ${JSON.stringify({ type: 'tool_result', content: 'Context Summarized', full_context: summary })}\n\n`);
+        } else {
+          // 0 Results
+          res.write(`data: ${JSON.stringify({ type: 'tool_result', content: 'No memories found', full_context: 'No relevant memories found in database.' })}\n\n`);
+        }
+      }
+      // --- LOGIC LOOP END ---
+
+      const toolSystemMsg = {
+        role: 'system',
+        content: systemContent
+      };
+
+      const effectiveMessages = [toolSystemMsg, ...messages];
+      const MAX_TURNS = 5;
+      let turn = 0;
+
+      // 3. Reasoning Loop
+      while (turn < MAX_TURNS) {
+        turn++;
+        console.log(`\n[API] 🔄 Turn ${turn} (Thought Loop)`);
+
+        let bufferedResponse = "";
+        let fullPrompt = effectiveMessages.map((msg: any) => {
+          const role = msg.role || 'user';
+          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '');
+          if (role === 'system') return `<|system|>\n${content}`;
+          if (role === 'user') return `<|user|>\n${content}`;
+          if (role === 'assistant') return `<|assistant|>\n${content}`;
+          return `${role.charAt(0).toUpperCase() + role.slice(1)}: ${content}`;
+        }).join('\n\n');
+        fullPrompt += '\n\n<|assistant|>\n';
+
+        try {
+          await runStreamingChat(
+            fullPrompt,
+            (token: string) => {
+              // Stream to client
+              const chunk = {
+                id: `chatcmpl-${Date.now()}`,
+                object: "chat.completion.chunk",
+                created: Math.floor(Date.now() / 1000),
+                model: "ece-core",
+                choices: [{ index: 0, delta: { content: token }, finish_reason: null }]
+              };
+              res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+              bufferedResponse += token;
+            },
+            "You are a helpful assistant.", // System prompt handled in fullPrompt structure for Qwen
+            { temperature, maxTokens: max_tokens }
+          );
+
+          console.log(`[API] Turn ${turn} Complete. Output Length: ${bufferedResponse.length}`);
+
+          // 4. Check for Tools (Regex updated for Budget)
+          const searchMatch = bufferedResponse.match(/<search(?: budget="(\d+)")?>(.*?)<\/search>/s);
+          if (searchMatch) {
+            const budget = searchMatch[1] ? parseInt(searchMatch[1]) : 5000;
+            const query = searchMatch[2].trim();
+            console.log(`[API] 🔍 Tool Call: Search("${query}") | Budget: ${budget}`);
+
+            // Notify Client of Tool Usage (Simulating a "Thought" or "Tool" event)
+            res.write(`data: ${JSON.stringify({ type: 'tool', status: 'searching', query, budget })}\n\n`);
+
+            // Execute Search (Internal Function)
+            const searchResult = await executeSearch(query, undefined, undefined, budget, false, 'all');
+
+            let toolOutput = "";
+            let toolDisplay = ""; // Concise version for UI
+
+            if (searchResult.results.length > 0) {
+              toolDisplay = `Found ${searchResult.results.length} memories (Total ${searchResult.context.length} chars).`;
+              toolOutput = `[Found ${searchResult.results.length} memories]:\n` +
+                searchResult.results.map(r => `- (${new Date(r.timestamp).toISOString()}) ${r.content.substring(0, 150)}...`).join('\n');
+            } else {
+              toolDisplay = `No memories found.`;
+              toolOutput = `[No memories found for "${query}"]`;
+            }
+
+            // Stream Result to Client
+            res.write(`data: ${JSON.stringify({ type: 'tool_result', content: toolDisplay, full_context: toolOutput })}\n\n`);
+
+            // Append to context
+            effectiveMessages.push({ role: 'assistant', content: bufferedResponse });
+            effectiveMessages.push({ role: 'system', content: `TOOL OUTPUT: ${toolOutput}\nNow answer.` });
+
+            // Continue Loop
+            continue;
+
+          } else {
+            // No tool call -> Done
+            break;
+          }
+
+        } catch (streamingError: any) {
+          console.error("[API] Streaming Error:", streamingError);
+          res.write(`data: ${JSON.stringify({ error: streamingError.message })}\n\n`);
+          // Force break loop
+          break;
+        }
       }
 
-      // Simulate streaming by chunks
-      // Simulate streaming by chunks
-      const chunkSize = 20;
-      for (let i = 0; i < fullResponse.length; i += chunkSize) {
-        const chunk = fullResponse.substring(i, i + chunkSize);
-        const packet = {
-          choices: [{
-            delta: { content: chunk }
-          }]
-        };
-        res.write(`data: ${JSON.stringify(packet)}\n\n`);
-        await new Promise(r => setTimeout(r, 10));
-      }
-
+      // 5. Finish
       res.write('data: [DONE]\n\n');
       res.end();
 
     } catch (e: any) {
-      console.error("Chat Error", e);
-      res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
-      res.end();
+      console.error("Chat API Error", e);
+      if (!res.headersSent) res.status(500).json({ error: e.message });
+      else res.end();
     }
   });
 

@@ -22,7 +22,7 @@ function resolveWorkerPath(relativePath: string) {
 }
 
 const CHAT_WORKER_PATH = resolveWorkerPath('../../core/inference/ChatWorker');
-const HYBRID_WORKER_PATH = resolveWorkerPath('../../core/inference/llamaLoaderWorker');
+
 
 export interface LoadModelOptions {
   ctxSize?: number;
@@ -39,9 +39,11 @@ export async function initWorker() {
 
   if (!clientWorker) {
     console.log(`[Provider] Tag-Walker Mode Active. Spawning Chat Worker...`);
-    // Use Hybrid Worker for Main Chat (Legacy compatibility)
-    clientWorker = await spawnWorker("HybridWorker", HYBRID_WORKER_PATH, {
-      gpuLayers: config.MODELS.MAIN.GPU_LAYERS
+    // Use Chat Worker for Main Chat (Standardized)
+    clientWorker = await spawnWorker("ChatWorker", CHAT_WORKER_PATH, {
+      gpuLayers: config.MODELS.MAIN.GPU_LAYERS,
+      // Pass forceCpu if needed, but we rely on gpuLayers config
+      forceCpu: config.MODELS.MAIN.GPU_LAYERS === 0
     });
   }
 
@@ -82,6 +84,10 @@ export async function initAutoLoad() {
 
   initPromise = (async () => {
     console.log("[Provider] Auto-loading configured models...");
+    console.log(`[Provider] DEBUG: process.env['LLM_GPU_LAYERS'] = "${process.env['LLM_GPU_LAYERS']}"`);
+    console.log(`[Provider] DEBUG: process.env['LLM_MODEL_PATH'] = "${process.env['LLM_MODEL_PATH']}"`);
+    console.log(`[Provider] DEBUG: config.MODELS.MAIN.GPU_LAYERS = ${config.MODELS.MAIN.GPU_LAYERS}`);
+    console.log(`[Provider] DEBUG: config.MODELS.MAIN.PATH = "${config.MODELS.MAIN.PATH}"`);
 
     try {
       await initWorker();
@@ -175,6 +181,53 @@ export async function runInference(prompt: string, data: any) {
   return null;
 }
 
+export async function runStreamingChat(
+  prompt: string,
+  onToken: (token: string) => void,
+  systemInstruction = "You are a helpful assistant.",
+  options: any = {}
+): Promise<string> {
+  // Always use ClientWorker for Main Chat
+  const targetWorker = clientWorker;
+  const targetModel = currentChatModelName;
+
+  if (!targetWorker || !targetModel) {
+    console.log("[Provider] Chat Model not loaded, auto-loading...");
+    await initAutoLoad();
+    if (!clientWorker || !currentChatModelName) throw new Error("Chat Model failed to load.");
+  }
+
+  // Double check worker reference after await
+  const worker = clientWorker!;
+
+  console.log(`[Provider] Streaming Chat: Prompting ${currentChatModelName} (${prompt.length} chars)...`);
+
+  return new Promise((resolve, reject) => {
+    let fullResponse = "";
+
+    const handler = (msg: any) => {
+      if (msg.type === 'token') {
+        if (onToken) onToken(msg.token);
+        fullResponse += msg.token;
+      } else if (msg.type === 'chatResponse') {
+        worker.off('message', handler);
+        console.log(`[Provider] Chat Complete (${fullResponse.length} chars)`);
+        resolve(msg.data || fullResponse);
+      } else if (msg.type === 'error') {
+        worker.off('message', handler);
+        console.error("Chat Error:", msg.error);
+        reject(new Error(msg.error));
+      }
+    };
+
+    worker.on('message', handler);
+    worker.postMessage({
+      type: 'chat',
+      data: { prompt, options: { ...options, systemPrompt: systemInstruction } }
+    });
+  });
+}
+
 export async function runSideChannel(prompt: string, systemInstruction = "You are a helpful assistant.", options: any = {}) {
   // Use Orchestrator Worker if available, falling back to client
   let targetWorker = orchestratorWorker || clientWorker;
@@ -225,6 +278,9 @@ export async function getEmbeddings(texts: string[]): Promise<number[][] | null>
 // Stub for now to match interface compatibility with rest of system
 export async function initInference() {
   // This is called by context.ts usually to ensure model loaded
+  // ANTI-GRAVITY PATCH: disable this legacy auto-load which picks random models without config
+  console.warn("[Provider] initInference called (Legacy). BLOCKED to prevent random model loading.");
+  /* 
   const fs = await import('fs');
   if (!fs.existsSync(MODELS_DIR)) return null;
   try {
@@ -233,6 +289,8 @@ export async function initInference() {
       return await loadModel(models[0]);
     }
   } catch (e) { console.error("Error listing models", e); }
+  */
+  return null;
   return null;
 }
 

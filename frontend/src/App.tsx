@@ -36,6 +36,13 @@ const SearchPage = () => {
   // Feature 7 State
   const [backupStatus, setBackupStatus] = useState('');
 
+  // Research Station State
+  const [showResearch, setShowResearch] = useState(false);
+  const [researchTab, setResearchTab] = useState<'search' | 'direct'>('search');
+  const [webQuery, setWebQuery] = useState('');
+  const [webResults, setWebResults] = useState<any[]>([]); // { title, link, snippet }
+  const [webSearching, setWebSearching] = useState(false);
+
   // Debounce Logic for Live Mode
   // Sync query to delay search
   useEffect(() => {
@@ -110,6 +117,36 @@ const SearchPage = () => {
     }
   };
 
+  const handleWebSearch = async () => {
+    if (!webQuery.trim()) return;
+    setWebSearching(true);
+    try {
+      const res = await fetch(`/v1/research/web-search?q=${encodeURIComponent(webQuery)}`);
+      const data = await res.json();
+      setWebResults(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      alert('Research Search Failed');
+    } finally {
+      setWebSearching(false);
+    }
+  };
+
+  const handleSaveArticle = async (url: string) => {
+    try {
+      const res = await fetch('/v1/research/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, category: 'article' })
+      });
+      const data = await res.json();
+      if (res.ok) alert(`Saved to Staging: ${data.title}`);
+      else alert(`Error: ${data.error}`);
+    } catch (e: any) {
+      alert(`Failed: ${e.message}`);
+    }
+  };
+
   const copyContext = () => {
     navigator.clipboard.writeText(context);
   };
@@ -120,7 +157,7 @@ const SearchPage = () => {
         <h2>Memory Search</h2>
         {/* ... (Previous header content) ... */}
 
-// ... (Skip down to line 253 inside the map loop) ...
+
 
 
 
@@ -130,6 +167,18 @@ const SearchPage = () => {
           <button className="btn-primary" onClick={handleBackup} style={{ fontSize: '0.8rem', padding: '0.4rem' }}>
             💾 {backupStatus || 'Backup'}
           </button>
+
+          {/* Research Button (Triggers Modal) */}
+          <button
+            className="btn-primary"
+            style={{ fontSize: '0.9rem', padding: '0.4rem 0.8rem', border: '1px solid var(--accent-primary)', color: 'white', background: 'var(--bg-tertiary)' }}
+            onClick={() => setShowResearch(true)}
+          >
+            🕵️ Research
+          </button>
+
+
+
 
           {/* Dream Button (Restored) */}
           <button
@@ -165,22 +214,24 @@ const SearchPage = () => {
 
         {/* Scope Filters (New UI) */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          {['all', 'code', 'docs'].map(s => (
-            <button
-              key={s}
-              className="btn-primary"
-              style={{
-                fontSize: '0.8rem',
-                padding: '0.3rem 0.8rem',
-                background: scope === s ? 'var(--accent-primary)' : 'transparent',
-                border: scope === s ? 'none' : '1px solid var(--border-subtle)',
-                opacity: scope === s ? 1 : 0.7
-              }}
-              onClick={() => setScope(s as any)}
-            >
-              {s.toUpperCase()}
-            </button>
-          ))}
+          {
+            ['all', 'code', 'docs'].map(s => (
+              <button
+                key={s}
+                className="btn-primary"
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '0.3rem 0.8rem',
+                  background: scope === s ? 'var(--accent-primary)' : 'transparent',
+                  border: scope === s ? 'none' : '1px solid var(--border-subtle)',
+                  opacity: scope === s ? 1 : 0.7
+                }}
+                onClick={() => setScope(s as any)}
+              >
+                {s.toUpperCase()}
+              </button>
+            ))
+          }
         </div>
 
         <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
@@ -224,12 +275,14 @@ const SearchPage = () => {
             transition: 'width 0.3s ease'
           }} />
         </div>
-        {metadata && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            <span>Used: {metadata.tokenCount || 0} tokens | {metadata.charCount || 0} chars ({(metadata.filledPercent || 0).toFixed(1)}%)</span>
-            <span>Atoms: {metadata.atomCount || 0}</span>
-          </div>
-        )}
+        {
+          metadata && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              <span>Used: {metadata.tokenCount || 0} tokens | {metadata.charCount || 0} chars ({(metadata.filledPercent || 0).toFixed(1)}%)</span>
+              <span>Atoms: {metadata.atomCount || 0}</span>
+            </div>
+          )
+        }
       </div>
 
       {/* Query Section */}
@@ -268,42 +321,145 @@ const SearchPage = () => {
           </div>
         )}
 
-        {viewMode === 'cards' && results.map((r, idx) => (
-          <div key={r.id || idx} className="card-result animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span className={`badge ${r.provenance === 'sovereign' ? 'badge-sovereign' : 'badge-external'}`}>
-                  {r.provenance || 'EXTERNAL'}
-                </span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                  {(r.score || 0).toFixed(2)}
-                </span>
+        {
+          viewMode === 'cards' && results.map((r, idx) => (
+            <div key={r.id || idx} className="card-result animate-fade-in" style={{ animationDelay: `${idx * 0.05}s` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span className={`badge ${r.provenance === 'sovereign' ? 'badge-sovereign' : 'badge-external'}`}>
+                    {r.provenance || 'EXTERNAL'}
+                  </span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                    {(r.score || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                    {r.source}
+                  </span>
+                  <button
+                    onClick={() => handleQuarantine(r.id)}
+                    title="Quarantine this atom"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', opacity: 0.6 }}
+                  >
+                    🚫
+                  </button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                  {r.source}
-                </span>
-                <button
-                  onClick={() => handleQuarantine(r.id)}
-                  title="Quarantine this atom"
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', opacity: 0.6 }}
-                >
-                  🚫
-                </button>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.5', maxHeight: '300px', overflowY: 'auto' }}>
+                {r.content}
               </div>
             </div>
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.5', maxHeight: '300px', overflowY: 'auto' }}>
-              {r.content}
-            </div>
-          </div>
-        ))}
+          ))
+        }
 
-        {results.length === 0 && !loading && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
-            No memories found. Try a different query.
-          </div>
-        )}
+        {
+          results.length === 0 && !loading && (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+              No memories found. Try a different query.
+            </div>
+          )
+        }
       </div>
+      {/* Research Modal */}
+      {showResearch && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.8)', zIndex: 100,
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div className="glass-panel" style={{ width: '600px', height: '500px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#1a1a1a' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <h3>Research Station</h3>
+              <button onClick={() => setShowResearch(false)} style={{ background: 'transparent', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'white' }}>✕</button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <button
+                onClick={() => setResearchTab('search')}
+                style={{ padding: '0.5rem', borderBottom: researchTab === 'search' ? '2px solid var(--accent-primary)' : 'none', color: researchTab === 'search' ? 'white' : 'gray', background: 'transparent', cursor: 'pointer' }}
+              >
+                Web Search
+              </button>
+              <button
+                onClick={() => setResearchTab('direct')}
+                style={{ padding: '0.5rem', borderBottom: researchTab === 'direct' ? '2px solid var(--accent-primary)' : 'none', color: researchTab === 'direct' ? 'white' : 'gray', background: 'transparent', cursor: 'pointer' }}
+              >
+                Direct Link / Upload
+              </button>
+            </div>
+
+            {/* TAB: Web Search */}
+            {researchTab === 'search' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    className="input-glass"
+                    placeholder="Search DuckDuckGo..."
+                    value={webQuery}
+                    onChange={(e) => setWebQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleWebSearch()}
+                  />
+                  <button className="btn-primary" onClick={handleWebSearch} disabled={webSearching}>
+                    {webSearching ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {webResults.map((r, i) => (
+                    <div key={i} style={{ padding: '0.8rem', background: 'var(--bg-secondary)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <a href={r.link} target="_blank" style={{ fontWeight: 'bold', color: 'var(--accent-primary)', textDecoration: 'none', fontSize: '0.9rem', maxWidth: '80%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</a>
+                        <button
+                          onClick={() => handleSaveArticle(r.link)}
+                          style={{ padding: '0.2rem 0.6rem', fontSize: '0.7rem', background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)', cursor: 'pointer', color: 'white' }}
+                        >
+                          💾 Save
+                        </button>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>{r.snippet}</div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '0.3rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.link}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Direct Link */}
+            {researchTab === 'direct' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem' }}>Scrape URL</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input className="input-glass" placeholder="https://example.com/article" id="direct-url-input" />
+                    <button className="btn-primary" onClick={() => {
+                      const val = (document.getElementById('direct-url-input') as HTMLInputElement).value;
+                      if (val) handleSaveArticle(val);
+                    }}>Scrape</button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem' }}>Upload HTML File</label>
+                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.html,.htm';
+                    input.onchange = async (_e: any) => {
+                      alert("File upload pending implementation of /convert endpoint. Please use URL for now.");
+                    };
+                    input.click();
+                  }}>
+                    📂 Select File
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -314,6 +470,7 @@ const ChatPage = () => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ragContext, setRagContext] = useState('');
 
   // Model Config State
   const [modelDir, setModelDir] = useState('../models');
@@ -393,6 +550,7 @@ const ChatPage = () => {
 
       if (!res.body) throw new Error('No response body');
 
+      // ... inside sendMessage ...
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let assistantContent = '';
@@ -411,14 +569,46 @@ const ChatPage = () => {
 
             try {
               const data = JSON.parse(dataStr);
-              const delta = data.choices[0]?.delta?.content || '';
+
+              // HANDLE TOOL EVENTS
+              if (data.type === 'tool') {
+                setMessages(prev => [...prev, {
+                  role: 'assistant',
+                  content: `🛠️ Searching: "${data.query}" (Budget: ${data.budget})...`,
+                  isTool: true
+                } as any]);
+                assistantContent = '';
+                continue;
+              }
+
+              if (data.type === 'tool_result') {
+                setRagContext(prev => prev + data.full_context + "\n\n");
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  // Find the last tool message and update it
+                  const lastMsg = newMsgs[newMsgs.length - 1];
+                  if ((lastMsg as any).isTool) {
+                    lastMsg.content += `\n✅ ${data.content}`;
+                    // Optional: Store full context in expanded state?
+                    // For now just append to text.
+                  }
+                  return newMsgs;
+                });
+                continue;
+              }
+
+              const delta = data.choices?.[0]?.delta?.content || '';
               assistantContent += delta;
 
               setMessages(prev => {
                 const newMsgs = [...prev];
                 const last = newMsgs[newMsgs.length - 1];
-                if (last.role === 'assistant') {
+                // Ensure we are appending to an assistant message, not a tool message
+                if (last.role === 'assistant' && !(last as any).isTool) {
                   last.content = assistantContent;
+                } else if (delta) {
+                  // New assistant message chunk after a tool output
+                  newMsgs.push({ role: 'assistant', content: assistantContent });
                 }
                 return newMsgs;
               });
@@ -482,8 +672,14 @@ const ChatPage = () => {
         <div style={{ flex: 1 }}>
           <h3>Context</h3>
           <div className="glass-panel" style={{ padding: '1rem', height: '100%', display: 'flex', flexDirection: 'column', gap: '0.5rem', minHeight: '150px' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Tokens: 0 / 4096</span>
-            <textarea className="input-glass" style={{ flex: 1, resize: 'none', fontSize: '0.8rem' }} placeholder="Paste context here..." />
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Tokens: {ragContext.length / 4} / 4096</span>
+            <textarea
+              className="input-glass"
+              style={{ flex: 1, resize: 'none', fontSize: '0.8rem' }}
+              placeholder="RAG Context will appear here..."
+              value={ragContext}
+              readOnly
+            />
           </div>
         </div>
       </div>
@@ -499,7 +695,11 @@ const ChatPage = () => {
               background: m.role === 'user' ? 'rgba(100, 108, 255, 0.1)' : 'var(--glass-bg)',
               whiteSpace: 'pre-wrap'
             }}>
-              {m.content}
+              {m.content.split(/(<search.*?>.*?<\/search>)/gs).map((part, i) => (
+                part.startsWith('<search')
+                  ? null // HIDE the raw tag from the bubble
+                  : <span key={i}>{part}</span>
+              ))}
             </div>
           ))}
           {loading && <div style={{ alignSelf: 'flex-start', color: 'var(--text-dim)', fontSize: '0.8rem', marginLeft: '1rem' }}>Thinking...</div>}

@@ -109,16 +109,14 @@ async function handleChat(data: { prompt: string, options: any }) {
 
     try {
         const response = await session.prompt(data.prompt, {
-            temperature: 0.1, // Stable for extraction
-            maxTokens: data.options.maxTokens || 1024,
-            onToken: () => {
+            temperature: 0.7, // Higher temp for reasoning
+            maxTokens: data.options.maxTokens || 2048,
+            onTextChunk: (chunk: string) => {
                 if (tokensReceived === 0) {
                     console.log(`[Worker] First token generated! Pre-fill took ${(Date.now() - startTime) / 1000}s`);
                 }
-                tokensReceived++;
-                if (tokensReceived % 10 === 0) {
-                    console.log(`[Worker] Generated ${tokensReceived} tokens...`);
-                }
+                tokensReceived += chunk.length; // Approximate, as chunk is text
+                parentPort?.postMessage({ type: 'token', token: chunk });
             }
         });
 

@@ -20,10 +20,10 @@ function sanitizeFilename(text: string): string {
 const ATOMS_PER_BUNDLE = 100;
 
 /**
- * Mirror Protocol: Exports memories to Markdown files organized by @bucket/#tag
+ * Mirror Protocol: Exports memories to Markdown files organized by @bucket/#tag/#nested hierarchy
  */
 export async function createMirror() {
-    console.log('🪞 Mirror Protocol: Starting semantic brain mirroring (Bundled)...');
+    console.log('🪞 Mirror Protocol: Starting semantic brain mirroring (Recursive Tree)...');
 
     // Wipe existing mirrored brain to ensure only latest state is present
     if (fs.existsSync(MIRRORED_BRAIN_PATH)) {
@@ -42,10 +42,11 @@ export async function createMirror() {
         return;
     }
 
-    console.log(`🪞 Mirror Protocol: Processing ${result.rows.length} memories for bundling...`);
+    console.log(`🪞 Mirror Protocol: Processing ${result.rows.length} memories for hierarchical bundling...`);
 
-    // Grouping structure: Map<BucketName, Map<TagName, Map<SourcePath, any[]>>>
-    const groups = new Map<string, Map<string, Map<string, any[]>>>();
+    // Grouping structure: Map<FullPathString, Map<SourcePath, Atom[]>>
+    // We group by Target Directory Path -> Then by Source File (Original Provenance)
+    const directoryGroups = new Map<string, Map<string, any[]>>();
 
     for (const row of result.rows) {
         const [id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance] = row;
@@ -54,51 +55,70 @@ export async function createMirror() {
         const tagList = (tags as string[]) || [];
         const primaryBucket = bucketList.length > 0 ? bucketList[0] : 'general';
 
-        // Use logic identical to old writeMirrorFile to determine tagName
+        // 1. Determine Root Bucket
         const bucketName = (primaryBucket && primaryBucket !== 'general' && primaryBucket !== 'unknown') ? primaryBucket : 'general';
+
+        // 2. Determine Tag Path
+        // Filter out the bucket name itself and 'inbox' to avoid redundancy
         const specificTags = tagList.filter((t: string) => t !== bucketName && t !== 'inbox');
-        const tagName = specificTags.length > 0 ? specificTags[0] : '_untagged';
+
+        // Sort tags alphabetically to ensure deterministic nesting order
+        // e.g. ["#z", "#a"] -> "#a/#z" path
+        specificTags.sort();
+
+        // Construct Path segments
+        // starting with @bucket
+        const pathSegments = [`@${sanitizeFilename(bucketName)}`];
+
+        // Append tag segments
+        if (specificTags.length > 0) {
+            specificTags.forEach(t => pathSegments.push(`#${sanitizeFilename(t)}`));
+        } else {
+            // Check if we should use "_untagged" or just root?
+            // Existing logic used "_untagged". Let's stick to that for cleanliness.
+            pathSegments.push('#_untagged');
+        }
+
+        const relativePath = path.join(...pathSegments);
+
+        // 3. Add to Group
+        if (!directoryGroups.has(relativePath)) directoryGroups.set(relativePath, new Map());
+        const sourceMap = directoryGroups.get(relativePath)!;
 
         const sourcePath = (source as string) || 'unknown';
+        if (!sourceMap.has(sourcePath)) sourceMap.set(sourcePath, []);
 
-        // Initialize nested maps
-        if (!groups.has(bucketName)) groups.set(bucketName, new Map());
-        const bucketMap = groups.get(bucketName)!;
-
-        if (!bucketMap.has(tagName)) bucketMap.set(tagName, new Map());
-        const tagMap = bucketMap.get(tagName)!;
-
-        if (!tagMap.has(sourcePath)) tagMap.set(sourcePath, []);
-        const atomList = tagMap.get(sourcePath)!;
-
-        atomList.push({ id, timestamp, content, source: sourcePath, type, hash, buckets: bucketList, tags: tagList, sequence: sequence || 0, provenance });
+        sourceMap.get(sourcePath)!.push({
+            id, timestamp, content, source: sourcePath, type, hash, buckets: bucketList, tags: tagList, sequence: sequence || 0, provenance
+        });
     }
 
     let bundleCount = 0;
     let totalAtoms = 0;
 
-    // Write bundles
-    for (const [bucketName, bucketMap] of groups) {
-        const bucketDir = path.join(MIRRORED_BRAIN_PATH, `@${sanitizeFilename(bucketName)}`);
+    // Write bundles recursively
+    for (const [relPath, sourceMap] of directoryGroups) {
+        const fullDir = path.join(MIRRORED_BRAIN_PATH, relPath);
 
-        for (const [tagName, tagMap] of bucketMap) {
-            const tagDir = path.join(bucketDir, `#${sanitizeFilename(tagName)}`);
-            if (!fs.existsSync(tagDir)) fs.mkdirSync(tagDir, { recursive: true });
+        if (!fs.existsSync(fullDir)) fs.mkdirSync(fullDir, { recursive: true });
 
-            for (const [sourcePath, atomList] of tagMap) {
-                // Sort by sequence or timestamp
-                atomList.sort((a, b) => (a.sequence - b.sequence) || (a.timestamp - b.timestamp));
+        for (const [sourcePath, atomList] of sourceMap) {
+            // Sort by sequence or timestamp
+            atomList.sort((a, b) => (a.sequence - b.sequence) || (a.timestamp - b.timestamp));
 
-                // Chunk into bundles
-                for (let i = 0; i < atomList.length; i += ATOMS_PER_BUNDLE) {
-                    const chunk = atomList.slice(i, i + ATOMS_PER_BUNDLE);
-                    const partNum = Math.floor(i / ATOMS_PER_BUNDLE) + 1;
-                    const isMultiPart = atomList.length > ATOMS_PER_BUNDLE;
+            // Chunk into bundles
+            for (let i = 0; i < atomList.length; i += ATOMS_PER_BUNDLE) {
+                const chunk = atomList.slice(i, i + ATOMS_PER_BUNDLE);
+                const partNum = Math.floor(i / ATOMS_PER_BUNDLE) + 1;
+                const isMultiPart = atomList.length > ATOMS_PER_BUNDLE;
 
-                    await writeBundleFile(tagDir, sourcePath, chunk, partNum, isMultiPart, bucketName);
-                    bundleCount++;
-                    totalAtoms += chunk.length;
-                }
+                // We pass the "bucketName" just for the Archive label in case of orphan
+                // We extract it from the path (first segment)
+                const bucketLabel = relPath.split(path.sep)[0].replace('@', '');
+
+                await writeBundleFile(fullDir, sourcePath, chunk, partNum, isMultiPart, bucketLabel);
+                bundleCount++;
+                totalAtoms += chunk.length;
             }
         }
     }
@@ -120,6 +140,10 @@ async function writeBundleFile(tagDir: string, sourcePath: string, atoms: any[],
         fileName += '.md';
 
         const filePath = path.join(tagDir, fileName);
+
+        if (!fs.existsSync(tagDir)) {
+            fs.mkdirSync(tagDir, { recursive: true });
+        }
 
         // Build content (Standard 066)
         let content = `# Source: ${isOrphan ? 'Archive (' + bucketName + ')' : sourcePath}\n`;

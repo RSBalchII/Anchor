@@ -141,7 +141,11 @@ const DEFAULT_CONFIG: Config = {
     MAIN: {
       PATH: process.env['LLM_MODEL_PATH'] || "gemma-3-4b-it-abliterated-v2.i1-Q4_K_S.gguf",
       CTX_SIZE: parseInt(process.env['LLM_CTX_SIZE'] || "4096"),
-      GPU_LAYERS: parseInt(process.env['LLM_GPU_LAYERS'] || "33")
+      GPU_LAYERS: (() => {
+        console.log("DEBUG: Loading Config. Env LLM_GPU_LAYERS:", process.env['LLM_GPU_LAYERS']);
+        console.log("DEBUG: .env Path:", path.join(__dirname, '..', '..', '..', '.env'));
+        return parseInt(process.env['LLM_GPU_LAYERS'] || "33");
+      })()
     },
 
     ORCHESTRATOR: {
@@ -161,6 +165,36 @@ const DEFAULT_CONFIG: Config = {
 // Configuration loader
 function loadConfig(): Config {
   // Determine config file path
+  // Priority: user_settings.json > sovereign.yaml > .env > Defaults
+
+  let loadedConfig = { ...DEFAULT_CONFIG };
+
+  // 1. Try Loading user_settings.json (Highest Priority for User Overrides)
+  const userSettingsPath = path.join(__dirname, '..', '..', 'user_settings.json');
+  if (fs.existsSync(userSettingsPath)) {
+    try {
+      const userSettings = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+      console.log(`[Config] Loaded settings from ${userSettingsPath}`);
+
+      if (userSettings.llm) {
+        if (userSettings.llm.chat_model) loadedConfig.MODELS.MAIN.PATH = userSettings.llm.chat_model;
+        if (userSettings.llm.gpu_layers !== undefined) loadedConfig.MODELS.MAIN.GPU_LAYERS = userSettings.llm.gpu_layers;
+        if (userSettings.llm.ctx_size !== undefined) loadedConfig.MODELS.MAIN.CTX_SIZE = userSettings.llm.ctx_size;
+
+        // Also update Orchestrator if task_model is set
+        if (userSettings.llm.task_model) loadedConfig.MODELS.ORCHESTRATOR.PATH = userSettings.llm.task_model;
+      }
+
+      if (userSettings.dreamer) {
+        if (userSettings.dreamer.batch_size) loadedConfig.DREAMER_BATCH_SIZE = userSettings.dreamer.batch_size;
+      }
+
+    } catch (e) {
+      console.error(`[Config] Failed to parse user_settings.json:`, e);
+    }
+  }
+
+  // 2. Try Loading sovereign.yaml (Legacy/System Config)
   const configPath = process.env['SOVEREIGN_CONFIG_PATH'] ||
     path.join(__dirname, '..', '..', 'sovereign.yaml') ||
     path.join(__dirname, '..', 'config', 'default.yaml');
@@ -169,14 +203,36 @@ function loadConfig(): Config {
     try {
       const configFile = fs.readFileSync(configPath, 'utf8');
       const parsedConfig = yaml.load(configFile) as Partial<Config>;
-      return { ...DEFAULT_CONFIG, ...parsedConfig } as Config;
+      // We merge yaml ON TOP of defaults, but user_settings should ideally win.
+      // However, since we already loaded user_settings into loadedConfig, 
+      // simple spread would overwrite IF sovereign.yaml has keys.
+      // But typically sovereign.yaml is missing.
+      // To be safe: Merge YAML first, then re-apply user_settings (or just trust user didn't make both).
+      loadedConfig = { ...loadedConfig, ...parsedConfig };
+
+      // Re-apply user_settings to be sure (Simplified logic above was slightly out of order for strict priority)
+      // Re-reading user settings is cheap enough or we could have done it second.
+      // Let's stick to the flow: Defaults -> YAML -> User Settings.
+      // ... (Redoing correct order below)
     } catch (error) {
       console.warn(`Failed to load config from ${configPath}:`, error);
-      return DEFAULT_CONFIG;
     }
   }
 
-  return DEFAULT_CONFIG;
+  // CORRECT ORDER RE-APPLICATION:
+  if (fs.existsSync(userSettingsPath)) {
+    try {
+      const userSettings = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
+      if (userSettings.llm) {
+        if (userSettings.llm.chat_model) loadedConfig.MODELS.MAIN.PATH = userSettings.llm.chat_model;
+        if (userSettings.llm.gpu_layers !== undefined) loadedConfig.MODELS.MAIN.GPU_LAYERS = userSettings.llm.gpu_layers;
+        if (userSettings.llm.ctx_size !== undefined) loadedConfig.MODELS.MAIN.CTX_SIZE = userSettings.llm.ctx_size;
+        if (userSettings.llm.task_model) loadedConfig.MODELS.ORCHESTRATOR.PATH = userSettings.llm.task_model;
+      }
+    } catch (e) { }
+  }
+
+  return loadedConfig;
 }
 
 // Export configuration

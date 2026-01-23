@@ -209,6 +209,19 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
     cleanText = cleanText.replace(/^\uFEFF/, '').replace(/[\u0000\uFFFD]/g, '');
     cleanText = cleanText.replace(/\r\n/g, '\n');
 
+    // SURGEON V2: Aggressive Regex cleaning for "Processing..." spam
+    // Handles both newlines and mid-line concatenation (e.g., "FileA... Processing 'FileB'...")
+    const beforeSurgeon = cleanText.length;
+    cleanText = cleanText.replace(/(?:^|\s|\.{3}\s*)Processing '[^']+'\.{3}/g, '\n');
+
+    // Clean up resulting empty lines
+    cleanText = cleanText.replace(/\n{3,}/g, '\n\n');
+
+    // Logic for logging removal stats
+    if (cleanText.length < beforeSurgeon) {
+        // console.log(`[Refiner] Surgeon V2 removed ${beforeSurgeon - cleanText.length} chars of log spam.`);
+    }
+
     let strategy: 'code' | 'prose' | 'blob' = 'prose';
 
     // HEURISTIC FIX: Check for the specific schema keys
@@ -289,8 +302,6 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
         provenance = 'external';
     }
 
-    // ... inside refineContent loop
-
     return rawAtoms.map((content, index) => {
         const idHash = crypto.createHash('sha256')
             .update(sourceId + index.toString() + content)
@@ -305,16 +316,12 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
         let atomProvenance: 'sovereign' | 'external' | 'quarantine' = provenance;
 
         // 1. "Processing..." Log Spam Detection
-        const lines = content.split('\n');
-        const processingLines = lines.filter(l => l.trim().startsWith("Processing '") || l.trim().includes("... Processing '"));
-        if (processingLines.length > 5 || (lines.length > 0 && processingLines.length / lines.length > 0.3)) {
-            atomProvenance = 'quarantine';
-            finalTags.push('#needs_review', '#log_spam');
-            // console.log(`[Refiner] Quarantined atom_${idHash} (Log Spam)`);
-        }
+        // Surgeon V2 handled this upstream, so any surviving lines are likely intentional or deep inside code blocks.
+        // We leave them as sovereign.
 
         // 2. Excessive File Path Lists (Generic)
         // If > 50% of lines look like file paths
+        const lines = content.split('\n');
         const pathLines = lines.filter(l => l.includes('/') || l.includes('\\'));
         if (lines.length > 10 && (pathLines.length / lines.length > 0.6)) {
             // Slightly weaker check, so maybe just tag it for now unless it's obviously junk
