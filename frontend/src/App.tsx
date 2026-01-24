@@ -881,9 +881,18 @@ function App() {
     return () => window.removeEventListener('hashchange', handler);
   }, []);
 
+  // Electron Detection
+  const [isElectron, setIsElectron] = useState(false);
+
+  useEffect(() => {
+    // @ts-ignore
+    if (window.electronAPI?.isElectron()) setIsElectron(true);
+  }, []);
+
   return (
     <>
-      <nav style={{ padding: '1rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {isElectron && <TitleBar />}
+      <nav style={{ padding: '1rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: isElectron ? '30px' : '0' }}>
         <span style={{ fontWeight: 'bold', cursor: 'pointer' }} onClick={() => window.location.hash = '#'}>SCE</span>
         <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem' }}>
           <a onClick={() => window.location.hash = '#search'} style={{ cursor: 'pointer', color: route === '#search' ? 'white' : 'gray' }}>Search</a>
@@ -900,5 +909,23 @@ function App() {
     </>
   );
 }
+
+const TitleBar = () => (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, height: '32px',
+    background: 'rgba(0,0,0,0.8)', borderBottom: '1px solid var(--border-subtle)',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '0 10px', zIndex: 9999,
+    // @ts-ignore - Electron drag region
+    WebkitAppRegion: 'drag', userSelect: 'none'
+  }}>
+    <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 'bold' }}>ECE Desktop</span>
+    <div style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' } as any}>
+      <button onClick={() => (window as any).electronAPI.minimize()} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}>─</button>
+      <button onClick={() => (window as any).electronAPI.maximize()} style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer' }}>□</button>
+      <button onClick={() => (window as any).electronAPI.close()} style={{ background: 'none', border: 'none', color: '#ff5555', cursor: 'pointer' }}>✕</button>
+    </div>
+  </div>
+);
 
 export default App;

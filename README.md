@@ -87,9 +87,17 @@ LLM_GPU_LAYERS=33
 EMBEDDING_GPU_LAYERS=0
 ```
 
-### 3. Run Engine
+### 3. Run Engine (One-Click)
+Windows users can simply run the included batch script to build and launch everything:
 
 ```bash
+start.bat
+```
+
+Or manually:
+
+```bash
+pnpm build
 pnpm start
 ```
 
