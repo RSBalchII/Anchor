@@ -52,7 +52,8 @@ const CONFIG = {
         '.git', 'node_modules', 'archive', 'backups', 'logs', 'context', '.vscode',
         '.idea', '.pytest_cache', '__pycache__', 'dist', 'build', 'target',
         'venv', 'env', '.venv', '.env', 'Pods', 'Carthage', 'CocoaPods',
-        '.next', '.nuxt', 'public', 'static', 'assets', 'images', 'img', 'codebase',
+        '.next', '.nuxt', 'public', 'static', 'assets', 'images', 'img', 'codebase', 
+        'standards', 'tests',
     ],
 
     excludeFiles: [

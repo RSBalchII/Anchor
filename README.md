@@ -228,6 +228,10 @@ pnpm start
 
 * **Server**: `http://localhost:3000`
 * **Health Check**: `http://localhost:3000/health`
+* **Monitoring Dashboard**: `http://localhost:3000/monitoring/dashboard`
+* **Performance Metrics**: `http://localhost:3000/monitoring/metrics`
+* **System Resources**: `http://localhost:3000/monitoring/resources`
+* **Request Tracing**: `http://localhost:3000/monitoring/traces`
 
 ### 4. Run Desktop Overlay (Optional)
 
