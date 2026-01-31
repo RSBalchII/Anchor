@@ -8,9 +8,20 @@ The Sovereign Context Engine (ECE) is a background service that acts as a "secon
 The engine runs as a headless kernel, accessible via:
 
 #### 🔧 Key Architectural Components:
-- **Stateless Contextual Chat Protocol (Standard 084)**: Context-first, stateless interaction model that grounds each response in relevant ECE data without session memory.
+- **Semantic Shift Architecture (Standard 084)**: Context-first, stateless interaction model that grounds each response in relevant ECE data without session memory.
+- **Relationship Narrative Discovery**: Entity co-occurrence detection for identifying relationship patterns across domains.
 - **Intelligent Context Provision**: Automatic retrieval and injection of relevant knowledge graph data for each query.
+- **Semantic Taxonomy System**: High-level semantic categories (`#Relationship`, `#Narrative`, `#Technical`, etc.) instead of granular entity tags.
 - **Toggle-Enabled Features**: Save-to-graph and port 8080 routing for flexible deployment and integration.
+- **Universal Application**: Same architecture works for personal relationships (Rob/Jade) and industrial data (Oil/CO2/Seismic).
+
+#### 🧠 Cognitive Architecture:
+- **Stateless Model Operation**: Each query gets fresh context from ECE search results instead of chat session history
+- **Entity Co-occurrence Detection**: Finds relationships when multiple entities appear in the same semantic molecule
+- **Semantic Category Emergence**: Tags emerge from entity interactions rather than keyword matching
+- **Narrative Arc Assembly**: Constructs relationship stories from entity co-occurrence patterns
+- **Relationship Historian**: Discovers relationship narratives across any domain (personal, industrial, technical)
+- **Universal Semantic Graph**: Same architecture works for personal relationships (Alice/Bob) and industrial data (CO2/Sequestration/Oil)
 
 1.  **GlassPanel UI** (Default): A focused web interface at `http://localhost:3000`.
 2.  **Neural Terminal**: A command-line chat tool (`npm run chat`).
@@ -117,6 +128,29 @@ The system has transitioned from a tool-using orchestrator to a high-fidelity **
 
 > [!NOTE]
 > Tool-calling capabilities (Search, Read, etc.) have been archived to maximize reasoning efficacy and UI simplicity. They remain available in the codebase for future re-integration.
+
+## 📊 Architecture Diagrams
+
+To help visualize the complex architecture of ECE_Core, we've created several diagrams:
+
+### System Architecture Overview
+![System Architecture](./docs/architecture_diagram.md#system-architecture-overview)
+
+### Atomic Taxonomy: Atom -> Molecule -> Compound
+![Atomic Taxonomy](./docs/architecture_diagram.md#atomic-taxonomy-atom---molecule---compound)
+
+### Ingestion Pipeline
+![Ingestion Pipeline](./docs/ingestion_pipeline_diagram.md#complete-ingestion-flow)
+
+### Search Architecture (Tag-Walker Protocol)
+![Search Architecture](./docs/search_architecture_diagram.md#overview-of-search-architecture)
+
+### API Flow Diagrams
+- [Ingestion API Flow](./docs/api_flows_diagram.md#ingestion-api-flow)
+- [Search API Flow](./docs/api_flows_diagram.md#search-api-flow)
+- [Chat API Flow](./docs/api_flows_diagram.md#chat-api-flow)
+- [File Watch Ingestion Flow](./docs/api_flows_diagram.md#file-watch-ingestion-flow)
+- [Tag-Walker Search Flow](./docs/api_flows_diagram.md#tag-walker-search-flow)
 ---
 
 ## 🚀 Quick Start
