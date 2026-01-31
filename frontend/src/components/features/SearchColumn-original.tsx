@@ -1,4 +1,5 @@
-import { useState, useEffect, memo, useCallback } from 'react';
+
+import { useState, useEffect, memo } from 'react';
 import { api } from '../../services/api';
 import { GlassPanel } from '../ui/GlassPanel';
 import { Button } from '../ui/Button';
@@ -52,22 +53,15 @@ export const SearchColumn = memo(({
     useEffect(() => {
         if (!activeMode) return;
         const timer = setTimeout(() => {
-            if (query.trim()) {
-                // Create a new array reference to force update
-                setResults([]);
-                handleSearch();
-            }
+            if (query.trim()) handleSearch();
         }, 500);
         return () => clearTimeout(timer);
     }, [query, activeMode, tokenBudget, sovereignBias, activeBuckets, activeTags]);
 
     const handleQuarantine = async (atomId: string) => {
         if (!confirm('Quarantine this atom? It will be tagged #manually_quarantined.')) return;
-
-        // Create a new array to force re-render
         setResults(prev => prev.filter(r => r.id !== atomId));
         setMetadata((prev: any) => prev ? ({ ...prev, atomCount: prev.atomCount - 1 }) : null);
-
         try {
             await api.quarantineAtom(atomId);
         } catch (e) {
@@ -76,14 +70,11 @@ export const SearchColumn = memo(({
         }
     };
 
-    const handleSearch = useCallback(async () => {
+    const handleSearch = async () => {
         if (!query.trim()) return;
-
         setLoading(true);
-        // Force clear results with a new array reference to ensure UI update
         setResults([]);
         console.log(`[SearchColumn-${id}] Searching: "${query}" | Budget: ${tokenBudget}`);
-
         try {
             const data = await api.search({
                 query: query,
@@ -95,19 +86,9 @@ export const SearchColumn = memo(({
             });
 
             if (data.results) {
-                // Create a new array with unique identifiers to force re-render
-                const updatedResults = data.results.map((result: any, index: number) => ({
-                    ...result,
-                    // Add a unique key that changes with each search to force re-render
-                    _searchId: `${result.id || index}_${Date.now()}_${Math.random()}`
-                }));
-
-                setResults(updatedResults);
+                setResults(data.results);
                 setContext(data.context || '');
                 setMetadata(data.metadata);
-
-                // Explicitly sync to parent to ensure global Copy button works immediately
-                onContextUpdate(id, data.context || '');
 
                 if (onFullUpdate) {
                     const fullText = (data.results || []).map((r: any) => `[${r.provenance}] ${r.source}:\n${r.content}`).join('\n\n');
@@ -120,20 +101,17 @@ export const SearchColumn = memo(({
                     });
                 }
             } else {
-                // Create a new empty array to force update
                 setResults([]);
                 setContext('No results found.');
                 setMetadata(null);
             }
         } catch (e) {
             console.error(e);
-            setResults([]);
             setContext('Error searching memories.');
-            setMetadata(null);
         } finally {
             setLoading(false);
         }
-    }, [query, tokenBudget, sovereignBias, activeBuckets, activeTags, autoSplit, onAddColumn, onFullUpdate, id]);
+    };
 
     const copyContext = async () => {
         try {
@@ -146,7 +124,7 @@ export const SearchColumn = memo(({
     };
 
     return (
-        <GlassPanel key={`search-column-${id}`} style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)', minWidth: '300px', overflow: 'hidden' }}>
+        <GlassPanel style={{ flex: 1, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)', minWidth: '300px', overflow: 'hidden' }}>
 
             {/* Header: Filters & Buckets */}
             <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -156,7 +134,7 @@ export const SearchColumn = memo(({
                         const isActive = activeBuckets.includes(bucket);
                         return (
                             <Button
-                                key={`bucket-${id}-${bucket}`}
+                                key={`bucket-${bucket}`}
                                 variant="primary"
                                 style={{
                                     fontSize: '0.7rem', padding: '0.2rem 0.5rem',
@@ -179,14 +157,13 @@ export const SearchColumn = memo(({
                 </div>
 
                 {!isOnly && (
-                    <Button key={`remove-btn-${id}`} variant="icon" onClick={() => onRemove(id)}>✕</Button>
+                    <Button variant="icon" onClick={() => onRemove(id)}>✕</Button>
                 )}
             </div>
 
             {/* Advanced Toggles */}
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Input
-                    key={`live-toggle-${id}`}
                     variant="checkbox"
                     checked={activeMode}
                     onChange={(e) => setActiveMode(e.target.checked)}
@@ -194,14 +171,12 @@ export const SearchColumn = memo(({
                     style={{}}
                 />
                 <Input
-                    key={`sov-toggle-${id}`}
                     variant="checkbox"
                     checked={sovereignBias}
                     onChange={(e) => setSovereignBias(e.target.checked)}
                     label="Sov"
                 />
                 <Input
-                    key={`split-toggle-${id}`}
                     variant="checkbox"
                     checked={autoSplit}
                     onChange={(e) => setAutoSplit(e.target.checked)}
@@ -212,7 +187,6 @@ export const SearchColumn = memo(({
                 <div style={{ flex: 1, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>{tokenBudget} tks</span>
                     <Input
-                        key={`budget-slider-${id}`}
                         variant="range"
                         min="512" max="131072" step="512"
                         value={tokenBudget}
@@ -230,7 +204,7 @@ export const SearchColumn = memo(({
                 }} />
             </div>
             {metadata && (
-                <div key={`metadata-${id}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-dim)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: 'var(--text-dim)' }}>
                     <span>Context: {metadata.tokenCount || 0} / {tokenBudget} tokens</span>
                     <span>{metadata.atomCount || 0} atoms included</span>
                 </div>
@@ -242,7 +216,7 @@ export const SearchColumn = memo(({
                     const isActive = activeTags.includes(t);
                     return (
                         <Button
-                            key={`tag-${id}-${t}`}
+                            key={`tag-${t}`}
                             variant="primary"
                             style={{
                                 fontSize: '0.7rem', padding: '0.1rem 0.4rem',
@@ -269,18 +243,16 @@ export const SearchColumn = memo(({
             {/* Input */}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <Input
-                    key={`query-input-${id}`}
                     placeholder="Query..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
                     style={{ fontSize: '0.9rem' }}
                 />
-                <Button key={`search-btn-${id}`} onClick={handleSearch} disabled={loading} style={{ padding: '0.4rem' }}>
+                <Button onClick={handleSearch} disabled={loading} style={{ padding: '0.4rem' }}>
                     🔍
                 </Button>
                 <Button
-                    key={`viewmode-btn-${id}`}
                     onClick={() => setViewMode(viewMode === 'cards' ? 'raw' : 'cards')}
                     style={{ padding: '0.4rem', fontSize: '0.8rem', background: viewMode === 'raw' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.1)' }}
                     title="Toggle Raw/Cards View"
@@ -290,18 +262,16 @@ export const SearchColumn = memo(({
             </div>
 
             {/* Results */}
-            <div key={`results-container-${id}`} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingRight: '0.3rem' }}>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.8rem', paddingRight: '0.3rem' }}>
                 {viewMode === 'raw' ? (
                     <div style={{ position: 'relative', height: '100%' }}>
                         <Button
-                            key={`copy-btn-${id}`}
                             onClick={copyContext}
                             style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', fontSize: '0.7rem', padding: '0.2rem 0.5rem', zIndex: 10 }}
                         >
                             Copy
                         </Button>
                         <textarea
-                            key={`context-area-${id}`}
                             className="input-glass"
                             style={{ width: '100%', height: '100%', resize: 'none', fontFamily: 'monospace', fontSize: '0.95rem' }}
                             value={context} readOnly placeholder="Raw context..."
@@ -311,7 +281,7 @@ export const SearchColumn = memo(({
                     results.map((r, idx) => {
                         const isIncluded = metadata?.atomCount ? idx < metadata.atomCount : true;
                         return (
-                            <div key={`${r._searchId || r.id || idx}-${id}`} className="card-result" style={{
+                            <div key={r.id || idx} className="card-result" style={{
                                 padding: '0.8rem', fontSize: '0.9rem',
                                 opacity: isIncluded ? 1 : 0.5,
                                 borderLeft: isIncluded ? '2px solid var(--accent-primary)' : '2px solid transparent'
@@ -332,15 +302,9 @@ export const SearchColumn = memo(({
                     })
                 )}
                 {results.length === 0 && !loading && (
-                    <div key={`no-results-${id}`} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)', fontSize: '0.8rem' }}>No results</div>
-                )}
-                {loading && (
-                    <div key={`loading-${id}`} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)', fontSize: '0.8rem' }}>Searching...</div>
+                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-dim)', fontSize: '0.8rem' }}>No results</div>
                 )}
             </div>
         </GlassPanel>
     );
 });
-
-// Add a display name for better debugging
-SearchColumn.displayName = 'SearchColumn';

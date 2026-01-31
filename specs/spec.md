@@ -9,6 +9,111 @@ Build a **personal external memory system** as an assistive cognitive tool using
 - **Mirror 2.0**: Tangible Knowledge Graph filesystem projections.
 - **Local-first LLM integration**: `node-llama-cpp` for GGUF support.
 - **Browser Paradigm**: Universal compatibility through selective loading and cross-platform design.
+- **Semantic Shift Architecture (Standard 084)**: Context-first, stateless interaction model that grounds each response in relevant ECE data without session memory.
+- **Relationship Narrative Discovery**: Entity co-occurrence detection for identifying relationship patterns across domains.
+
+## The Semantic Shift Architecture (Standard 084)
+
+### Core Philosophy: "Context-First, Stateless Interaction"
+
+The ECE implements a **Stateless Contextual Chat Protocol** that eliminates traditional chat session memory while maximizing contextual relevance through dynamic ECE data retrieval. This approach ensures each interaction is grounded in the most relevant knowledge graph data without accumulating conversational baggage.
+
+### Architecture Evolution: From Keyword Index to Semantic Graph
+
+**Before (Legacy):** Chunk → Atom → Tag (Granular keyword tagging)
+**After (Semantic Shift):** Compound → Molecule → Atom (Semantic category tagging)
+
+Where:
+- **Compound**: The source file (e.g., journal_entry.yaml)
+- **Molecule**: The text chunk with semantic meaning (e.g., paragraph/sentence)
+- **Atom**: The atomic entity within molecules (e.g., "Rob", "Jade", "Albuquerque")
+
+### Semantic Category System
+
+The system now uses constrained high-level semantic categories instead of unlimited granular tags:
+
+- `#Relationship`: People interacting, personal connections
+- `#Narrative`: Stories, timelines, memories, sequences
+- `#Technical`: Code, architecture, system documentation
+- `#Industry`: External market data (Oil, CO2, etc.)
+- `#Location`: Geographic or spatial references
+- `#Emotional`: High sentiment variance content
+- `#Temporal`: Time-based sequences and chronology
+- `#Causal`: Cause-effect relationships
+
+### Entity Co-occurrence Detection
+
+The system implements "Tag Emergence" where semantic tags emerge from the interaction of entities within semantic molecules:
+
+- **Relationship Detection**: When 2+ person entities appear in the same molecule → `#Relationship` tag
+- **Narrative Detection**: When person + time reference appear → `#Narrative` tag
+- **Technical Detection**: When technical terms appear → `#Technical` tag
+- **Location Detection**: When location references appear → `#Location` tag
+
+### Relationship Narrative Discovery
+
+The system can identify relationship patterns by detecting when entities appear together:
+
+```
+Input: "Rob and Jade went to the park yesterday"
+Process:
+  - Detect entities: ["Rob", "Jade"]
+  - Detect relationship indicator: "and"
+  - Detect time reference: "yesterday"
+  - Apply tags: #Relationship, #Narrative
+Output: Molecule tagged with relationship and narrative semantics
+```
+
+### Universal Application
+
+The same architecture works across domains:
+- **Personal Domain**: Alice/Bob relationship narratives
+- **Industrial Domain**: CO2/Sequestration/Oil industry relationships
+- **Technical Domain**: Code component relationships
+- **Research Domain**: Academic concept relationships
+
+### The Relationship Historian Pattern
+
+The Semantic Shift Architecture implements the "Relationship Historian" pattern that can extract relationship narratives from any domain:
+
+```
+Input Domain: Personal Relationships
+Input: "Alice and Bob went to the park yesterday"
+Process: Detect entities ["Alice", "Bob"], relationship indicator "and", temporal reference "yesterday"
+Output: #Relationship, #Narrative tagged molecule
+
+Input Domain: Industrial Data
+Input: "CO2 sequestration increased with pressure"
+Process: Detect entities ["CO2", "sequestration"], relationship indicator "with", quantitative reference "increased"
+Output: #Industry, #Causal tagged molecule
+
+Input Domain: Technical Architecture
+Input: "CozoDB and ECE work together for semantic search"
+Process: Detect entities ["CozoDB", "ECE"], relationship indicator "work together", functional reference "semantic search"
+Output: #Technical, #Relationship tagged molecule
+```
+
+This pattern enables the same semantic processing engine to function as a historian for any type of relationship data, making the ECE a truly universal context engine.
+
+### Semantic Categories (High-Level Taxonomy)
+
+Instead of granular entity tags, the system now uses constrained semantic categories:
+- `#Relationship`: People interacting, personal connections
+- `#Narrative`: Stories, timelines, memories, sequences
+- `#Technical`: Code, architecture, system documentation
+- `#Industry`: External market data (Oil, CO2, etc.)
+- `#Location`: Geographic or spatial references
+- `#Emotional`: High sentiment variance content
+- `#Temporal`: Time-based sequences and chronology
+- `#Causal`: Cause-effect relationships
+
+### Relationship Discovery Protocol
+
+The system implements "Tag Emergence" where semantic tags emerge from the interaction of entities within semantic molecules:
+- When 2+ person entities appear in the same molecule → `#Relationship` tag
+- When person + time reference appear → `#Narrative` tag
+- When technical terms appear → `#Technical` tag
+- When location references appear → `#Location` tag
 - **Stateless Contextual Chat Protocol (Standard 084)**: Context-first, stateless interaction model that grounds each response in relevant ECE data without session memory.
 
 ## Core Architecture

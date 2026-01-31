@@ -8,6 +8,7 @@ import { Button } from './components/ui/Button';
 import { SearchColumn } from './components/features/SearchColumn';
 import { ResearchModal } from './components/features/ResearchModal';
 import { QuarantinePage } from './components/features/QuarantinePage';
+import { TaxonomyPage } from './pages/TaxonomyPage';
 import { ChatInterface } from './components/Chat/ChatInterface';
 import { ModelSelector } from './components/Chat/ModelSelector';
 
@@ -34,6 +35,9 @@ const Dashboard = () => (
       </Button>
       <Button onClick={() => window.location.hash = '#quarantine'}>
         Infection Center
+      </Button>
+      <Button onClick={() => window.location.hash = '#taxonomy'}>
+        Cortex UI
       </Button>
     </div>
   </div>
@@ -236,8 +240,9 @@ function App() {
       ) : (
         <>
           {hash === '#search' ? <SearchPage /> :
-            hash === '#quarantine' ? <QuarantinePage /> :
-              <div style={{ padding: '4rem 2rem' }}>🚧 Module "{hash}" Under Construction</div>}
+            hash === '#taxonomy' ? <TaxonomyPage /> :
+              hash === '#quarantine' ? <QuarantinePage /> :
+                <div style={{ padding: '4rem 2rem' }}>🚧 Module "{hash}" Under Construction</div>}
         </>
       )}
     </div>

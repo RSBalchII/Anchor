@@ -29,3 +29,4 @@ ECE_Core uses a "Middle-Out" budgeting strategy to maximize context relevance wh
 ### 1.3 Assembly
 - **Re-Sorting**: After selection, atoms are re-sorted **Chronologically** to present a linear narrative to the LLM.
 - **Formatting**: Each atom is prefixed with `[Source: <filename>] (<ISO-Date>)`.
+- **Inflation**: See [085-context-inflation](./085-context-inflation.md). Atoms are inflated into coherent windows before budgeting.

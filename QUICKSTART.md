@@ -1,13 +1,25 @@
-# External Context Engine (ECE) - Sovereign Context Protocol
+# Sovereign Context Engine (ECE) - Semantic Shift Architecture
 
 > **The Browser Paradigm for AI Memory**: Just as web browsers allow any device to access the internet by loading only needed content, ECE allows any device to process massive AI context by retrieving only relevant "atoms" for current thought.
+
+> **The Semantic Shift**: The ECE now implements Standard 084 - transforming from a keyword indexer to a semantic graph with relationship narrative discovery capabilities.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+
 - Python 3.x (for native module compilation)
 - Build tools (Visual Studio Build Tools on Windows, Xcode on macOS)
+
+### New in Semantic Shift Architecture (v3.0)
+The ECE Core now implements the Semantic Shift Architecture (Standard 084) that transforms the system from a keyword indexer to a semantic graph with relationship narrative discovery capabilities.
+
+**Key New Features:**
+- **Semantic Categories**: High-level tags (`#Relationship`, `#Narrative`, `#Technical`) instead of granular entity tags
+- **Entity Co-occurrence Detection**: Automatically finds when entities appear together to form relationships
+- **Relationship Narrative Discovery**: Extracts relationship stories from entity co-occurrence patterns
+- **Stateless Contextual Chat**: Each query gets fresh context from ECE search results without session memory
+- **Universal Application**: Same architecture works for personal relationships, industrial data, and technical documentation
 
 ### Installation
 

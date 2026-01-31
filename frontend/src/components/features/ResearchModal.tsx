@@ -28,7 +28,7 @@ export const ResearchModal: React.FC<ResearchModalProps> = ({ onClose }) => {
     const handleSave = async (url: string) => {
         try {
             const res = await api.scrape(url, 'article');
-            if (res.ok) alert("Saved!"); else alert("Error saving.");
+            if (res.success) alert("Saved!"); else alert("Error: " + (res.error || "Unknown error"));
         } catch (e: any) { alert(e.message); }
     };
 

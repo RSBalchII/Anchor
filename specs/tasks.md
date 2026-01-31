@@ -29,25 +29,35 @@
 ### Phase 22: Browser Paradigm Implementation - **COMPLETED** ✅
 - [x] **Architecture Evolution**:
 
-## Active Sprint: Stateless Contextual Chat Implementation
+## Active Sprint: Semantic Shift Architecture Implementation
 
-### Phase 24: Intelligent Context Provision & Stateless Chat - **COMPLETED** ✅
-- [x] **Context Injection Protocol**:
-    *   [x] Implement ECE search API integration for dynamic context retrieval.
-    *   [x] Format context as system prompt for model consumption.
-    *   [x] Ensure context is injected before each user query.
-- [x] **Stateless Model Operation**:
-    *   [x] Eliminate session memory from chat interactions.
-    *   [x] Ground each response solely in retrieved ECE data and current prompt.
-    *   [x] Prevent context drift and maintain topical relevance.
+### Phase 24: Semantic Taxonomy & Relationship Discovery - **COMPLETED** ✅
+- [x] **Semantic Category System**:
+    *   [x] Replace granular entity tags with high-level semantic categories.
+    *   [x] Implement `#Relationship`, `#Narrative`, `#Technical`, `#Industry`, `#Location`, `#Emotional` categories.
+    *   [x] Create constrained taxonomy to prevent tag sprawl.
+- [x] **Relationship Discovery Protocol**:
+    *   [x] Implement entity co-occurrence detection in semantic molecules.
+    *   [x] Create relationship tagging when 2+ person entities appear together.
+    *   [x] Add narrative detection (person + time reference patterns).
+- [x] **Generic Naming**: Replace personal names (Rob/Jade/Dory) with generic names (Alice/Bob/Charlie) in documentation for broader applicability.
+- [x] **Molecule-Atom Architecture**:
+    *   [x] Implement semantic molecule processor for text chunks.
+    *   [x] Create atomic entity extraction from semantic molecules.
+    *   [x] Integrate semantic processing into ingestion pipeline.
+- [x] **Stateless Contextual Chat**:
+    *   [x] Ground each response in ECE search results instead of chat history.
+    *   [x] Eliminate session memory from model interactions.
+    *   [x] Implement context-first interaction model.
 - [x] **Toggle Feature Implementation**:
     *   [x] Add `save_to_graph` toggle to optionally persist conversations to knowledge graph.
     *   [x] Add `use_port_8080` toggle to route API requests for Qwen Code CLI integration.
     *   [x] Implement UI controls for both toggles in chat interface.
 - [x] **Standards & Documentation**:
-    *   [x] Create Standard 084: Stateless Contextual Chat Protocol.
-    *   [x] Update main specification documents to reflect new architecture.
+    *   [x] Create Standard 084: Semantic Shift Architecture.
+    *   [x] Update main specification documents to reflect semantic architecture.
     *   [x] Update README with key architectural components.
+    *   [x] Archive legacy test files and unused code.
     - [x] Implement PathManager for centralized path resolution
     - [x] Create NativeModuleManager with fallback mechanisms
     - [x] Develop Bright Node Protocol for graph-based reasoning

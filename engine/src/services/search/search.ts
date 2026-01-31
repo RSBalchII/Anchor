@@ -1,25 +1,28 @@
 /**
- * Enhanced Search Service with Bright Node Protocol
+ * Enhanced Search Service with Semantic Shift Architecture
  *
  * Implements:
- * 1. Engram Layer (Fast Lookup) - O(1) lookup for known entities
+ * 1. Semantic Molecule Lookup - O(1) lookup for semantic categories
  * 2. Provenance Boosting - Sovereign content gets boost
- * 3. Enhanced Tag-Walker Protocol - Graph-based associative retrieval with Bright Node illumination
+ * 3. Enhanced Tag-Walker Protocol - Graph-based associative retrieval with semantic category illumination
  * 4. Intelligent Query Expansion - GLM-assisted decomposition (Standard 069)
- * 5. Bright Node Inference Protocol - Selective graph illumination for reasoning
+ * 5. Semantic Inference Protocol - Selective graph illumination for relationship narratives
  */
 
 import { db } from '../../core/db.js';
 import { createHash } from 'crypto';
 import { composeRollingContext } from '../../core/inference/context_manager.js';
 import { config } from '../../config/index.js';
+import { SemanticCategory } from '../../types/taxonomy.js';
+import { executeSemanticSearch } from '../semantic/semantic-search.js';  // Import semantic search
 import wink from 'wink-nlp';
 import model from 'wink-eng-lite-web-model';
+import { ContextInflator } from './context-inflator.js';
 
 // Initialize NLP (Fast CPU-based)
 const nlp = wink(model);
 
-interface SearchResult {
+export interface SearchResult {
   id: string;
   content: string;
   source: string;
@@ -32,11 +35,16 @@ interface SearchResult {
   sequence?: number; // Added for Bright Node continuity
   molecular_signature?: string;  // V4 Nomenclature (formerly simhash)
   // Atomic Fields
+  compound_id?: string;
   start_byte?: number;
   end_byte?: number;
   type?: string;
   numeric_value?: number;
   numeric_unit?: string;
+  is_inflated?: boolean;
+  // Semantic Fields
+  semanticCategories?: SemanticCategory[];
+  relatedEntities?: string[];
 }
 
 // ...
@@ -280,10 +288,10 @@ export async function tagWalkerSearch(
     }
 
     const anchorQueryAtomic = `
-            ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score, sequence, molecular_signature, start_byte, end_byte, type, numeric_value, numeric_unit] := 
+            ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score, sequence, molecular_signature, start_byte, end_byte, type, numeric_value, numeric_unit, compound_id] := 
             ~memory:content_fts{id | query: $query, k: ${anchorLimit * 2}, bind_score: fts_score},
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance, sequence, simhash},
-            *molecules{id, start_byte, end_byte, type, numeric_value, numeric_unit},
+            *molecules{id, start_byte, end_byte, type, numeric_value, numeric_unit, compound_id},
             provenance != 'quarantine',
             score = 70.0 * fts_score,
             molecular_signature = simhash
@@ -327,7 +335,8 @@ export async function tagWalkerSearch(
         end_byte: isAtomic ? row[12] : undefined,
         type: isAtomic ? row[13] : undefined,
         numeric_value: isAtomic ? row[14] : undefined,
-        numeric_unit: isAtomic ? row[15] : undefined
+        numeric_unit: isAtomic ? row[15] : undefined,
+        compound_id: isAtomic ? row[16] : undefined
       };
     });
 
@@ -351,12 +360,12 @@ export async function tagWalkerSearch(
         `;
 
     const walkQueryAtomic = `
-            ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score, sequence, molecular_signature, start_byte, end_byte, type, numeric_value, numeric_unit] := 
+            ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score, sequence, molecular_signature, start_byte, end_byte, type, numeric_value, numeric_unit, compound_id] := 
             *memory{id: anchor_id, tags: anchor_tags},
             anchor_id in $anchorIds,
             tag in anchor_tags,
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance, sequence, simhash},
-            *molecules{id, start_byte, end_byte, type, numeric_value, numeric_unit},
+            *molecules{id, start_byte, end_byte, type, numeric_value, numeric_unit, compound_id},
             tag in tags,
             id != anchor_id,
             provenance != 'quarantine',
@@ -392,7 +401,8 @@ export async function tagWalkerSearch(
         end_byte: isAtomic ? row[12] : undefined,
         type: isAtomic ? row[13] : undefined,
         numeric_value: isAtomic ? row[14] : undefined,
-        numeric_unit: isAtomic ? row[15] : undefined
+        numeric_unit: isAtomic ? row[15] : undefined,
+        compound_id: isAtomic ? row[16] : undefined
       };
     });
 
@@ -490,18 +500,27 @@ export async function executeSearch(
   explicitTags: string[] = [],
   filters?: { type?: string; minVal?: number; maxVal?: number; }
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
-  console.log(`[Search] executeSearch (Expanded Tag-Walker) called with provenance: ${provenance}`);
+  console.log(`[Search] executeSearch (Semantic Shift Architecture) called with provenance: ${provenance}`);
 
-  // ... (PRE-PROCESS Logic remains same) ...
+  // PRE-PROCESS: Extract semantic categories from query
   const scopeTags: string[] = [...explicitTags];
   const queryParts = query.split(/\s+/);
   const cleanQueryParts: string[] = [];
+  const semanticCategories: SemanticCategory[] = [];
+  const entityPairs: string[] = []; // For relationship detection
   const KNOWN_BUCKETS = ['notebook', 'inbox', 'codebase', 'journal', 'archive', 'memories', 'external'];
 
   for (const part of queryParts) {
     if (part.startsWith('#')) {
       const term = part.substring(1).toLowerCase();
-      if (KNOWN_BUCKETS.includes(term) || term.includes('inbox')) {
+      // Check if it's a semantic category
+      const semanticCategory = Object.values(SemanticCategory).find(cat =>
+        cat.toLowerCase().includes(term) || cat.toLowerCase().replace('#', '').includes(term)
+      );
+
+      if (semanticCategory) {
+        semanticCategories.push(semanticCategory as SemanticCategory);
+      } else if (KNOWN_BUCKETS.includes(term) || term.includes('inbox')) {
         if (!buckets) buckets = [];
         buckets.push(term);
       } else {
@@ -511,6 +530,22 @@ export async function executeSearch(
       cleanQueryParts.push(part);
     }
   }
+
+  // Detect potential entity pairs for relationship search
+  if (cleanQueryParts.length >= 2) {
+    // Look for relationship indicators in the query
+    const relationshipIndicators = ['and', 'with', 'met', 'told', 'said', 'visited', 'called', 'texted', 'about'];
+    for (let i = 0; i < cleanQueryParts.length - 1; i++) {
+      if (relationshipIndicators.includes(cleanQueryParts[i].toLowerCase())) {
+        // Found a potential relationship: [person1] [indicator] [person2]
+        if (i > 0 && i < cleanQueryParts.length - 1) {
+          entityPairs.push(`${cleanQueryParts[i - 1]}_${cleanQueryParts[i + 1]}`);
+          entityPairs.push(`${cleanQueryParts[i + 1]}_${cleanQueryParts[i - 1]}`); // Bidirectional
+        }
+      }
+    }
+  }
+
   const cleanQuery = cleanQueryParts.join(' ');
   const realBuckets = new Set(buckets || []);
 
@@ -522,7 +557,7 @@ export async function executeSearch(
   }
 
   console.log(`[Search] Query: "${cleanQuery}"`);
-  console.log(`[Search] Filters -> Buckets: [${Array.from(realBuckets).join(', ')}] | Tags: [${scopeTags.join(', ')}]`);
+  console.log(`[Search] Filters -> Buckets: [${Array.from(realBuckets).join(', ')}] | Tags: [${scopeTags.join(', ')}] | Semantic Categories: [${semanticCategories.join(', ')}] | Entity Pairs: [${entityPairs.join(', ')}]`);
 
   const parsedQuery = parseNaturalLanguage(cleanQuery);
   if (parsedQuery !== cleanQuery) {
@@ -556,7 +591,25 @@ export async function executeSearch(
           const matchesTags = scopeTags.every(t => rowTags.includes(t));
           const matchesBuckets = realBucketsArray.every(b => rowBuckets.includes(b));
 
-          if ((scopeTags.length === 0 || matchesTags) && (realBucketsArray.length === 0 || matchesBuckets)) {
+          // NEW: Check semantic category match
+          const matchesSemanticCategory = semanticCategories.length === 0 ||
+            semanticCategories.some(cat => rowTags.includes(cat.replace('#', '')));
+
+          // NEW: Check for entity pair relationships in content
+          const hasEntityPair = entityPairs.length > 0 &&
+            entityPairs.some(pair => {
+              const [entity1, entity2] = pair.split('_');
+              const contentLower = (row[1] as string).toLowerCase();
+              return contentLower.includes(entity1.toLowerCase()) && contentLower.includes(entity2.toLowerCase());
+            });
+
+          if ((scopeTags.length === 0 || matchesTags) &&
+            (realBucketsArray.length === 0 || matchesBuckets) &&
+            (semanticCategories.length === 0 || matchesSemanticCategory)) {
+
+            // Boost score for entity pair matches
+            let score = hasEntityPair ? 250 : 200; // Higher score for relationship matches
+
             // Active Cleansing
             const simhash = row[8] || "0";
             let isDuplicate = false;
@@ -583,7 +636,19 @@ export async function executeSearch(
 
             if (!isDuplicate) {
               finalResults.push({
-                id: row[0], content: row[1], source: row[2], timestamp: row[3], buckets: row[4], tags: row[5], epochs: row[6], provenance: row[7], score: 200, molecular_signature: simhash
+                id: row[0],
+                content: row[1],
+                source: row[2],
+                timestamp: row[3],
+                buckets: row[4],
+                tags: row[5],
+                epochs: row[6],
+                provenance: row[7],
+                score: score,
+                molecular_signature: simhash,
+                // Add semantic information
+                semanticCategories: semanticCategories,
+                relatedEntities: hasEntityPair ? entityPairs : undefined
               });
               includedIds.add(row[0]);
               if (simhash !== "0") includedHashes.push(simhash);
@@ -623,6 +688,28 @@ export async function executeSearch(
     const typeMultiplier = TYPE_SCORE_MULT[r.type || 'prose'] || 1.0;
     score *= typeMultiplier;
 
+    // NEW: Boost scores for semantic category matches
+    if (semanticCategories.length > 0) {
+      const hasSemanticMatch = semanticCategories.some(cat =>
+        r.tags.includes(cat.replace('#', ''))
+      );
+      if (hasSemanticMatch) {
+        score *= 1.5; // Boost for semantic category matches
+      }
+    }
+
+    // NEW: Boost scores for entity pair relationships
+    if (entityPairs.length > 0) {
+      const hasEntityPairMatch = entityPairs.some(pair => {
+        const [entity1, entity2] = pair.split('_');
+        const contentLower = (r.content || '').toLowerCase();
+        return contentLower.includes(entity1.toLowerCase()) && contentLower.includes(entity2.toLowerCase());
+      });
+      if (hasEntityPairMatch) {
+        score *= 2.0; // Significant boost for relationship matches
+      }
+    }
+
     if (!includedIds.has(r.id)) {
       // Active Cleansing Check
       let isDuplicate = false;
@@ -647,7 +734,13 @@ export async function executeSearch(
       }
 
       if (!isDuplicate) {
-        finalResults.push({ ...r, score });
+        finalResults.push({
+          ...r,
+          score,
+          // Add semantic information
+          semanticCategories: semanticCategories,
+          relatedEntities: entityPairs.length > 0 ? entityPairs : undefined
+        });
         includedIds.add(r.id);
         if (simhash !== "0") includedHashes.push(simhash);
       }
@@ -659,7 +752,13 @@ export async function executeSearch(
   // Final Sort by Score
   finalResults.sort((a, b) => b.score - a.score);
 
-  return formatResults(finalResults, maxChars);
+  // 3. CONTEXT INFLATION (Standard 085)
+  // Inflate separate molecules into coherent windows
+  const inflatedResults = await ContextInflator.inflate(finalResults);
+
+  console.log(`[Search] Inflated ${finalResults.length} atoms into ${inflatedResults.length} context windows.`);
+
+  return formatResults(inflatedResults, maxChars);
 }
 
 /**
@@ -767,8 +866,8 @@ function formatResults(results: SearchResult[], maxChars: number): { context: st
   const candidates = results.map(r => {
     let content = r.content || '';
 
-    // Use molecular coordinates for precise slicing if available
-    if (r.start_byte !== undefined && r.end_byte !== undefined && r.start_byte >= 0 && r.end_byte > r.start_byte) {
+    // Use molecular coordinates for precise slicing if available, but skip if already inflated
+    if (!r.is_inflated && r.start_byte !== undefined && r.end_byte !== undefined && r.start_byte >= 0 && r.end_byte > r.start_byte) {
       try {
         // Extract the molecular slice from the full content
         const contentBuffer = Buffer.from(content, 'utf8');

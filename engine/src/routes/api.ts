@@ -10,6 +10,7 @@ import { db } from '../core/db.js';
 
 // Import services and types
 import { executeSearch, smartChatSearch, executeMoleculeSearch } from '../services/search/search.js';
+import { SemanticIngestionService } from '../services/semantic/semantic-ingestion-service.js';
 import { dream } from '../services/dreamer/dreamer.js';
 import { getState, clearState } from '../services/scribe/scribe.js';
 import { listModels, loadModel, runStreamingChat } from '../services/llm/provider.js';
@@ -21,7 +22,7 @@ import { setupEnhancedRoutes } from './enhanced-api.js';
 import { AgentRuntime } from '../agent/runtime.js';
 
 export function setupRoutes(app: Application) {
-  // Ingestion endpoint
+  // Ingestion endpoint (Semantic Shift Architecture)
   app.post('/v1/ingest', async (req: Request, res: Response) => {
     try {
       const { content, source, type, bucket, buckets = [], tags = [] } = req.body;
@@ -31,44 +32,18 @@ export function setupRoutes(app: Application) {
         return;
       }
 
-      // Handle legacy single-bucket param
-      const allBuckets = bucket ? [...buckets, bucket] : buckets;
-
-      // Generate a unique ID for the memory
-      const id = `mem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const timestamp = Date.now();
-      const hash = crypto.createHash('sha256').update(content).digest('hex');
-
-      // Insert into the database
-      // Insert into the database
-      console.log(`[API] Ingesting memory: ${id} (Source: ${source || 'unknown'})`);
-      // Schema: id => timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding
-      await db.run(
-        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding] <- $data 
-         :insert memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding}`,
-        {
-          data: [[
-            id,
-            timestamp,
-            content,
-            source || 'unknown',
-            source || 'unknown',
-            0,
-            type || 'text',
-            hash,
-            allBuckets,
-            tags,
-            [], // epochs
-            'external',
-            "0", // simhash (default)
-            new Array(768).fill(0.1) // Zero-stub for now
-          ]]
-        }
+      // Use the new semantic ingestion service
+      const ingestionService = new SemanticIngestionService();
+      const result = await ingestionService.ingestContent(
+        content,
+        source || 'unknown',
+        type || 'text',
+        bucket,
+        buckets,
+        tags
       );
 
-      // ...
-
-      res.status(200).json({ status: 'success', id, message: 'Ingested successfully' });
+      res.status(200).json(result);
     } catch (e: any) {
       console.error('[API] Ingest Error:', e);
       res.status(500).json({ error: e.message });
@@ -251,16 +226,47 @@ export function setupRoutes(app: Application) {
       const budget = (req.body as any).token_budget ? (req.body as any).token_budget * 4 : (body.max_chars || 20000);
       const tags = (req.body as any).tags || [];
 
-      // Use Smart Search Strategy
-      const result = await smartChatSearch(
-        body.query,
-        allBuckets,
-        budget,
-        tags
-      );
+      // Check if this is a semantic/relationship query
+      const isSemanticQuery = req.body.semantic ||
+                             req.body.relationship ||
+                             req.body.narrative ||
+                             (body.query.toLowerCase().includes('relationship') ||
+                              body.query.toLowerCase().includes('with') ||
+                              body.query.toLowerCase().includes('and') && body.query.toLowerCase().includes('jade') ||
+                              body.query.toLowerCase().includes('rob'));
+
+      let result;
+      if (isSemanticQuery) {
+        // Use semantic search for relationship/narrative queries
+        const { executeSemanticSearch } = await import('../services/semantic/semantic-search.js');
+        const semanticResult = await executeSemanticSearch(
+          body.query,
+          allBuckets,
+          budget,
+          (req.body as any).provenance || 'all',
+          tags
+        );
+
+        // Ensure semantic result conforms to expected format
+        result = {
+          context: semanticResult.context,
+          results: semanticResult.results,
+          strategy: semanticResult.strategy || 'semantic_relationship',
+          splitQueries: semanticResult.splitQueries || [],
+          metadata: semanticResult.metadata || {}
+        };
+      } else {
+        // Use traditional smart search for other queries
+        result = await smartChatSearch(
+          body.query,
+          allBuckets,
+          budget,
+          tags
+        );
+      }
 
       // Construct standard response
-      console.log(`[API] Search "${body.query}" -> Found ${result.results.length} results (Strategy: ${result.strategy})`);
+      console.log(`[API] ${isSemanticQuery ? 'Semantic' : 'Traditional'} Search "${body.query}" -> Found ${result.results.length} results (Strategy: ${result.strategy})`);
 
       res.status(200).json({
         status: 'success',
@@ -273,6 +279,7 @@ export function setupRoutes(app: Application) {
           engram_hits: 0,
           vector_latency: 0,
           provenance_boost_active: true,
+          search_type: isSemanticQuery ? 'semantic' : 'traditional',
           ...(result.metadata || {})
         }
       });

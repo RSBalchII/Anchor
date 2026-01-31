@@ -118,12 +118,24 @@ export async function ingestContent(
   const bucketsArray = Array.isArray(buckets) ? buckets : [buckets];
   const epochsJson: string[] = []; // Pass as array
 
+  // Process content into semantic molecules using the semantic processor
+  const { SemanticMoleculeProcessor } = await import('../semantic/semantic-molecule-processor.js');
+  const semanticProcessor = new SemanticMoleculeProcessor();
+  const semanticMolecule = await semanticProcessor.processTextChunk(processedContent, source, timestamp, provenance);
+
+  // Extract semantic categories and contained entities from the semantic molecule
+  const semanticCategories = semanticMolecule.semanticTags || [];
+  const containedEntities = semanticMolecule.containedEntities || [];
+
+  // Combine semantic categories with existing tags
+  const allTags = [...new Set([...tagsJson, ...semanticCategories.map((cat: string) => cat.replace('#', ''))])];
+
   // Insert the memory with provenance information
   // Schema: id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding
-  const insertQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`;
+  const insertQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data :insert memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`;
 
   await db.run(insertQuery, {
-    data: [[id, timestamp, processedContent, source, source, 0, type, hash, bucketsArray, epochsJson, tagsJson, provenance, "0", new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)]]
+    data: [[id, timestamp, processedContent, source, source, 0, type, hash, bucketsArray, epochsJson, allTags, provenance, "0", new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)]]
   });
 
   // Strict Read-After-Write Verification (Standard 059)

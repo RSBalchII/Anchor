@@ -8,6 +8,13 @@ Philosophy, Privacy, and "Local-First" invariants that govern the fundamental pr
 
 ### Standards:
 
+## Domain 08: ARCHITECTURE (System Design & Cognitive Patterns)
+
+Architectural standards governing system design and cognitive processing patterns.
+
+### Standards:
+- **084**: Semantic Shift Architecture (The "Relationship Historian") - Transforming from keyword index to semantic graph with relationship-focused search
+
 - [012-context-utility-manifest.md](012-context-utility-manifest.md) - Context utility manifest and philosophical foundations
 - [027-no-resurrection-mode.md](027-no-resurrection-mode.md) - Manual control via NO_RESURRECTION_MODE flag
 - [028-default-no-resurrection-mode.md](028-default-no-resurrection-mode.md) - Default behavior for Ghost Engine resurrection

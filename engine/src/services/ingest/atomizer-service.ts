@@ -343,7 +343,7 @@ export class AtomizerService {
      * Splits content into molecules with byte offsets.
      * Enhanced with Type awareness (Prose vs Code vs Data).
      */
-    private splitIntoMolecules(text: string, type: 'prose' | 'code' | 'data' = 'prose'): { content: string, start: number, end: number }[] {
+    private splitIntoMolecules(text: string, type: 'prose' | 'code' | 'data' = 'prose', maxSize: number = 1024): { content: string, start: number, end: number }[] {
         const results: { content: string, start: number, end: number }[] = [];
 
         // --- STRATEGY: CODE (AST BLOCKS) ---
@@ -387,12 +387,9 @@ export class AtomizerService {
             if (currentBlock.trim().length > 0) {
                 results.push({ content: currentBlock, start: blockStart, end: currentCursor });
             }
-
-            return results;
         }
-
-        // --- STRATEGY: DATA (ROWS) ---
-        if (type === 'data') {
+        else if (type === 'data') {
+            // --- STRATEGY: DATA (ROWS) ---
             // Split by line
             let cursor = 0;
             const lines = text.split('\n');
@@ -403,35 +400,56 @@ export class AtomizerService {
                 }
                 cursor += len + 1;
             }
-            return results;
         }
+        else {
+            // --- STRATEGY: PROSE (SENTENCES with MARKDOWN FISSION) ---
 
-        // --- STRATEGY: PROSE (SENTENCES with MARKDOWN FISSION) ---
+            // MARKDOWN FISSION: Split on code fences first to separate code from prose
+            const codeFenceRegex = /```[\s\S]*?```/g;
+            const codeFences: { match: string, start: number, end: number }[] = [];
+            let fenceMatch;
 
-        // MARKDOWN FISSION: Split on code fences first to separate code from prose
-        const codeFenceRegex = /```[\s\S]*?```/g;
-        const codeFences: { match: string, start: number, end: number }[] = [];
-        let fenceMatch;
+            while ((fenceMatch = codeFenceRegex.exec(text)) !== null) {
+                codeFences.push({
+                    match: fenceMatch[0],
+                    start: fenceMatch.index,
+                    end: fenceMatch.index + fenceMatch[0].length
+                });
+            }
 
-        while ((fenceMatch = codeFenceRegex.exec(text)) !== null) {
-            codeFences.push({
-                match: fenceMatch[0],
-                start: fenceMatch.index,
-                end: fenceMatch.index + fenceMatch[0].length
-            });
-        }
+            // If we have code fences, split around them
+            if (codeFences.length > 0) {
+                let cursor = 0;
 
-        // If we have code fences, split around them
-        if (codeFences.length > 0) {
-            let cursor = 0;
+                for (const fence of codeFences) {
+                    // Pre-fence prose
+                    if (fence.start > cursor) {
+                        const preProse = text.substring(cursor, fence.start);
+                        if (preProse.trim().length > 0) {
+                            // Recursively split the prose portion into sentences
+                            const proseParts = preProse.split(/(?<=[.!?])\s+(?=[A-Z])/);
+                            let proseCursor = cursor;
+                            for (const part of proseParts) {
+                                if (part.trim().length === 0) continue;
+                                const partStart = text.indexOf(part, proseCursor);
+                                if (partStart !== -1) {
+                                    results.push({ content: part, start: partStart, end: partStart + part.length });
+                                    proseCursor = partStart + part.length;
+                                }
+                            }
+                        }
+                    }
 
-            for (const fence of codeFences) {
-                // Pre-fence prose
-                if (fence.start > cursor) {
-                    const preProse = text.substring(cursor, fence.start);
-                    if (preProse.trim().length > 0) {
-                        // Recursively split the prose portion into sentences
-                        const proseParts = preProse.split(/(?<=[.!?])\s+(?=[A-Z])/);
+                    // The code fence itself (will be typed as 'code' in molecule enrichment)
+                    results.push({ content: fence.match, start: fence.start, end: fence.end });
+                    cursor = fence.end;
+                }
+
+                // Post-fence prose (after last fence)
+                if (cursor < text.length) {
+                    const postProse = text.substring(cursor);
+                    if (postProse.trim().length > 0) {
+                        const proseParts = postProse.split(/(?<=[.!?])\s+(?=[A-Z])/);
                         let proseCursor = cursor;
                         for (const part of proseParts) {
                             if (part.trim().length === 0) continue;
@@ -443,48 +461,50 @@ export class AtomizerService {
                         }
                     }
                 }
+            } else {
+                // No code fences - standard sentence splitting
+                const parts = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
+                let searchCursor = 0;
 
-                // The code fence itself (will be typed as 'code' in molecule enrichment)
-                results.push({ content: fence.match, start: fence.start, end: fence.end });
-                cursor = fence.end;
-            }
+                for (const part of parts) {
+                    if (part.trim().length === 0) continue;
+                    const len = part.length;
+                    const realStart = text.indexOf(part, searchCursor); // Find next occurrence
 
-            // Post-fence prose (after last fence)
-            if (cursor < text.length) {
-                const postProse = text.substring(cursor);
-                if (postProse.trim().length > 0) {
-                    const proseParts = postProse.split(/(?<=[.!?])\s+(?=[A-Z])/);
-                    let proseCursor = cursor;
-                    for (const part of proseParts) {
-                        if (part.trim().length === 0) continue;
-                        const partStart = text.indexOf(part, proseCursor);
-                        if (partStart !== -1) {
-                            results.push({ content: part, start: partStart, end: partStart + part.length });
-                            proseCursor = partStart + part.length;
-                        }
+                    if (realStart !== -1) {
+                        results.push({ content: part, start: realStart, end: realStart + len });
+                        searchCursor = realStart + len;
                     }
                 }
             }
-
-            return results;
         }
 
-        // No code fences - standard sentence splitting
-        const parts = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
-        let searchCursor = 0;
+        // --- ENFORCE SIZE LIMIT (POST-PROCESS) ---
+        const finalResults: { content: string, start: number, end: number }[] = [];
 
-        for (const part of parts) {
-            if (part.trim().length === 0) continue;
-            const len = part.length;
-            const realStart = text.indexOf(part, searchCursor); // Find next occurrence
+        for (const item of results) {
+            if (item.content.length <= maxSize) {
+                finalResults.push(item);
+            } else {
+                // Force split large molecules
+                let currentStart = item.start;
+                let remaining = item.content;
 
-            if (realStart !== -1) {
-                results.push({ content: part, start: realStart, end: realStart + len });
-                searchCursor = realStart + len;
+                while (remaining.length > 0) {
+                    const chunk = remaining.substring(0, maxSize);
+                    finalResults.push({
+                        content: chunk,
+                        start: currentStart,
+                        end: currentStart + chunk.length
+                    });
+
+                    remaining = remaining.substring(maxSize);
+                    currentStart += maxSize;
+                }
             }
         }
 
-        return results;
+        return finalResults;
     }
 
     private detectMoleculeType(text: string, filePath: string): 'prose' | 'code' | 'data' {
