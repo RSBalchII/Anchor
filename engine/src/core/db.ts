@@ -217,7 +217,28 @@ export class Database {
       throw e;
     }
 
-    // Note: Full-text search indexes may not be supported in this PGlite version
+    // Create FTS index for content search
+    try {
+      await this.run(`
+        CREATE INDEX IF NOT EXISTS idx_atoms_content_gin
+        ON atoms
+        USING GIN(to_tsvector('simple', content));
+      `);
+      console.log("[DB] FTS index created for content search.");
+    } catch (e: any) {
+      console.warn("[DB] Could not create FTS index:", e.message);
+      // Try creating a simpler index if GIN fails
+      try {
+        await this.run(`
+          CREATE INDEX IF NOT EXISTS idx_atoms_content_text
+          ON atoms (content);
+        `);
+        console.log("[DB] Text index created as fallback.");
+      } catch (fallbackErr: any) {
+        console.warn("[DB] Could not create fallback text index:", fallbackErr.message);
+      }
+    }
+
     console.log("Database initialized successfully");
   }
 
@@ -247,7 +268,7 @@ export class Database {
       }
 
       // PGlite expects parameters in a different format
-      const result = await this.dbInstance.query(query, params || []);
+      const result = await this.dbInstance.query(query, params || [], { rowMode: 'array' });
       return result;
     } catch (e: any) {
       console.error(`[DB] Query Failed: ${e.message}`);
@@ -267,7 +288,8 @@ export class Database {
     // For now, use a simple LIKE query since full-text search may not be available
     const result = await this.dbInstance.query(
       `SELECT * FROM atoms WHERE content LIKE ?`,
-      [`%${query}%`]
+      [`%${query}%`],
+      { rowMode: 'array' }
     );
     return result;
   }

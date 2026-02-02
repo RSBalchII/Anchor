@@ -76,16 +76,21 @@ export async function executeSemanticSearch(
 
   // Build the search query to find semantic molecules using proper SQL FTS syntax
   // Updated to include molecular coordinates from molecules table for Context Inflation
+  // Use OR-based logic (|) on filtered keywords to allow conversational queries ("fuzzy" match)
+  const tsQueryString = searchTerms.filter(t => t.trim().length > 0).join(' | ');
+
   let searchQuery = `SELECT a.id, a.content, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
-         ts_rank(to_tsvector('english', a.content), plainto_tsquery('english', $1)) as score,
-         m.compound_id, m.start_byte, m.end_byte
+         ts_rank(to_tsvector('simple', a.content), to_tsquery('simple', $1)) as score,
+         COALESCE(m.compound_id, a.compound_id) as compound_id,
+         COALESCE(m.start_byte, a.start_byte) as start_byte,
+         COALESCE(m.end_byte, a.end_byte) as end_byte
     FROM atoms a
     LEFT JOIN molecules m ON a.id = m.id
-    WHERE to_tsvector('english', a.content) @@ plainto_tsquery('english', $1)`;
+    WHERE to_tsvector('simple', a.content) @@ to_tsquery('simple', $1)`;
 
   // Build query filters and parameters
   const queryFilters: string[] = [];
-  const sqlParams: any[] = [query]; // Start with the main query parameter
+  const sqlParams: any[] = [tsQueryString]; // Start with the constructed TS query parameter
   let paramCounter = 1; // Start with $2 since $1 is already used
 
   // Add provenance filter
@@ -129,12 +134,12 @@ export async function executeSemanticSearch(
     const processedResults: SearchResult[] = [];
 
     for (const row of rows) {
-      // Ensure row has the expected structure (now 13 columns)
+      // Ensure row has the expected structure
       if (row.length < 13) continue; // Skip malformed rows
 
       const content = typeof row[1] === 'string' ? row[1] : String(row[1] || '');
-      const rowTags = Array.isArray(row[5]) ? row[5] as string[] : (typeof row[5] === 'string' ? [row[5]] : []);
       const rowBuckets = Array.isArray(row[4]) ? row[4] as string[] : (typeof row[4] === 'string' ? [row[4]] : []);
+      const rowTags = Array.isArray(row[5]) ? row[5] as string[] : (typeof row[5] === 'string' ? [row[5]] : []);
 
       // Calculate semantic relevance score
       let score = calculateSemanticScore(content, queryEntities, searchTerms, entityPairs);
@@ -153,21 +158,21 @@ export async function executeSemanticSearch(
       // Create result object with proper structure
       const searchResult: SearchResult = {
         id: String(row[0] || ''),
-        content,
+        content: content,  // Content is at index 1
         source: String(row[2] || ''),
         timestamp: typeof row[3] === 'number' ? row[3] : Date.now(),
         buckets: rowBuckets,
         tags: rowTags,
         epochs: String(row[6] || ''),
         provenance: String(row[7] || ''),
-        score,
         molecular_signature: String(row[8] || ''),
+        score: typeof row[9] === 'number' ? row[9] : 0,  // Score is at index 9
         semanticCategories,
         relatedEntities: relationshipEntities.length > 0 ? relationshipEntities : undefined,
         // Inflation Metadata
-        compound_id: String(row[10] || ''),
-        start_byte: typeof row[11] === 'number' ? row[11] : Number(row[11]),
-        end_byte: typeof row[12] === 'number' ? row[12] : Number(row[12])
+        compound_id: String(row[10] || ''),  // compound_id is now at index 10
+        start_byte: typeof row[11] === 'number' ? row[11] : Number(row[11]),  // start_byte is now at index 11
+        end_byte: typeof row[12] === 'number' ? row[12] : Number(row[12])   // end_byte is now at index 12
       };
 
       processedResults.push(searchResult);
@@ -193,14 +198,28 @@ export async function executeSemanticSearch(
     const finalResults: SearchResult[] = [];
 
     for (const res of inflatedResults) {
-      if (totalChars + res.content.length <= maxChars) {
-        context += `[Source: ${res.source}] (Timestamp: ${new Date(res.timestamp).toISOString()})\n${res.content}\n\n`;
-        totalChars += res.content.length;
-        finalResults.push(res);
-      } else {
-        // Check if we can fit partial? Usually better to drop whole result in semantic search
-        // or just break to save tokens.
-        break;
+      // Get content from the result - it should already have content from inflation or original
+      const contentToUse = res.content || '';
+
+      if (contentToUse && contentToUse.length > 0) {
+        let finalContent = contentToUse;
+        const remainingBudget = maxChars - totalChars;
+
+        if (remainingBudget <= 0) break; // Budget full
+
+        // Truncate if too large for remaining budget
+        if (finalContent.length > remainingBudget) {
+          finalContent = finalContent.substring(0, remainingBudget) + '...';
+        }
+
+        context += `[Source: ${res.source || 'unknown'}] (Timestamp: ${new Date(res.timestamp).toISOString()})\n${finalContent}\n\n`;
+        totalChars += finalContent.length;
+
+        // Push modified result with truncated content
+        finalResults.push({
+          ...res,
+          content: finalContent
+        });
       }
     }
 

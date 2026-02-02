@@ -392,7 +392,7 @@ monitoringRouter.get('/search-health', async (_req: Request, res: Response) => {
     // Test query processing
     if (checks.searchIndex) {
       try {
-        const result = await db.run('SELECT id, content, ts_rank(to_tsvector(\'english\', content), plainto_tsquery(\'english\', $1)) as score FROM atoms WHERE to_tsvector(\'english\', content) @@ plainto_tsquery(\'english\', $1) LIMIT 1', ['test']);
+        const result = await db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', content), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', content) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['test']);
         checks.queryProcessing = result && result.rows && result.rows.length > 0;
       } catch (error) {
         // Query processing failed
@@ -404,7 +404,7 @@ monitoringRouter.get('/search-health', async (_req: Request, res: Response) => {
       const start = performance.now();
       for (let i = 0; i < 3; i++) {
         try {
-          await db.run('SELECT id, content, ts_rank(to_tsvector(\'english\', content), plainto_tsquery(\'english\', $1)) as score FROM atoms WHERE to_tsvector(\'english\', content) @@ plainto_tsquery(\'english\', $1) LIMIT 1', ['performance']);
+          await db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', content), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', content) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['performance']);
         } catch (error) {
           // Ignore individual failures in performance test
         }
@@ -466,7 +466,7 @@ monitoringRouter.get('/status', async (_req: Request, res: Response) => {
       db.run('SELECT 1 as a', []),
       Promise.resolve({}), // Native modules check
       db.run('SELECT id FROM atoms LIMIT 1', []),
-      db.run('SELECT id, content, ts_rank(to_tsvector(\'english\', content), plainto_tsquery(\'english\', $1)) as score FROM atoms WHERE to_tsvector(\'english\', content) @@ plainto_tsquery(\'english\', $1) LIMIT 1', ['test'])
+      db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', content), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', content) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['test'])
     ]);
     
     // Update component statuses

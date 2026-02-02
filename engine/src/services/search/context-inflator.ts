@@ -133,28 +133,35 @@ export class ContextInflator {
             for (const win of windows) {
                 try {
                     const query = `SELECT compound_body FROM compounds WHERE id = $1`;
-                    const result = await db.run(query, [compoundId]);
+                    const result = await db.run(query, [win.compoundId]);
 
                     if (result.rows && result.rows.length > 0) {
                         const fullBody = result.rows[0][0] as string;
-                        const safeStart = Math.max(0, win.start);
-                        const safeEnd = Math.min(fullBody.length, win.end);
-                        const expandedContent = fullBody.substring(safeStart, safeEnd);
+                        if (fullBody && fullBody.length > 0) {
+                            const safeStart = Math.max(0, win.start);
+                            const safeEnd = Math.min(fullBody.length, win.end);
+                            const expandedContent = fullBody.substring(safeStart, safeEnd);
 
-                        const base = win.originalResults[0];
-                        inflatedResults.push({
-                            ...base,
-                            content: `...${expandedContent}...`,
-                            score: Math.max(...win.originalResults.map(r => r.score)),
-                            is_inflated: true,
-                            start_byte: safeStart,
-                            end_byte: safeEnd
-                        });
+                            const base = win.originalResults[0];
+                            inflatedResults.push({
+                                ...base,
+                                content: `...${expandedContent}...`,
+                                score: Math.max(...win.originalResults.map(r => r.score)),
+                                is_inflated: true,
+                                start_byte: safeStart,
+                                end_byte: safeEnd
+                            });
+                        } else {
+                            // If compound body is empty, use the original content
+                            inflatedResults.push(...win.originalResults);
+                        }
                     } else {
+                        // If no compound found, use the original content
                         inflatedResults.push(...win.originalResults);
                     }
                 } catch (e) {
-                    console.error(`[ContextInflator] Failed to inflate compound ${compoundId}`, e);
+                    console.error(`[ContextInflator] Failed to inflate compound ${win.compoundId}`, e);
+                    // On error, use the original content
                     inflatedResults.push(...win.originalResults);
                 }
             }

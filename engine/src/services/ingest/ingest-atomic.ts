@@ -92,7 +92,11 @@ export class AtomicIngestService {
             this.zeroVector(), // embedding
             compound.provenance,
             buckets,
-            atoms.map(a => a.label) // tags
+            atoms.map(a => a.label), // tags
+            // New Inflation Fields
+            compound.id, // compound_id (self)
+            0, // start_byte
+            compound.compound_body.length // end_byte
         ]);
 
         // B. The Molecules (Sentences/Fragments)
@@ -113,7 +117,11 @@ export class AtomicIngestService {
                 this.zeroVector(), // embedding
                 compound.provenance,
                 buckets,
-                specificTags // TAGS
+                specificTags, // TAGS
+                // New Inflation Fields
+                m.compoundId,
+                m.start_byte || 0,
+                m.end_byte || 0
             ]);
         });
 
@@ -127,7 +135,7 @@ export class AtomicIngestService {
 
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            
+
             for (const row of chunk) {
                 await db.run(
                     `INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance, buckets, tags)
@@ -162,7 +170,7 @@ export class AtomicIngestService {
 
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            
+
             for (const row of chunk) {
                 await db.run(
                     `INSERT INTO molecules (id, content, compound_id, sequence, start_byte, end_byte, type, numeric_value, numeric_unit, molecular_signature, embedding)
@@ -189,7 +197,7 @@ export class AtomicIngestService {
 
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            
+
             for (const row of chunk) {
                 await db.run(
                     `INSERT INTO edges (source_id, target_id, weight, relation)
@@ -208,7 +216,7 @@ export class AtomicIngestService {
 
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            
+
             for (const row of chunk) {
                 await db.run(
                     `INSERT INTO compounds (id, compound_body, path, timestamp, provenance, molecular_signature, atoms, molecules, embedding)
@@ -233,11 +241,11 @@ export class AtomicIngestService {
 
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            
+
             for (const row of chunk) {
                 await db.run(
-                    `INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance, buckets, tags)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    `INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance, buckets, tags, compound_id, start_byte, end_byte)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                      ON CONFLICT (id) DO UPDATE SET
                        content = EXCLUDED.content,
                        source_path = EXCLUDED.source_path,
@@ -246,7 +254,10 @@ export class AtomicIngestService {
                        embedding = EXCLUDED.embedding,
                        provenance = EXCLUDED.provenance,
                        buckets = EXCLUDED.buckets,
-                       tags = EXCLUDED.tags`,
+                       tags = EXCLUDED.tags,
+                       compound_id = EXCLUDED.compound_id,
+                       start_byte = EXCLUDED.start_byte,
+                       end_byte = EXCLUDED.end_byte`,
                     row
                 );
             }

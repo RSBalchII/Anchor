@@ -5,6 +5,7 @@
 
 # Database & Storage
 context.db/
+context_data/
 backups/
 logs/
 *.log

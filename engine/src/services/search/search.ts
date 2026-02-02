@@ -267,10 +267,10 @@ export async function tagWalkerSearch(
     let anchorQuery = `
         SELECT a.id, a.content, a.source_path as source, a.timestamp,
                a.buckets, a.tags, 'epoch_placeholder' as epochs, a.provenance,
-               70.0 * ts_rank(to_tsvector(a.content), plainto_tsquery($1)) as score,
+               70.0 * ts_rank(to_tsvector('simple', a.content), plainto_tsquery('simple', $1)) as score,
                a.sequence, a.simhash as molecular_signature
         FROM atoms a
-        WHERE to_tsvector(a.content) @@ plainto_tsquery($1)
+        WHERE to_tsvector('simple', a.content) @@ plainto_tsquery('simple', $1)
     `;
 
     // Add provenance filter
@@ -751,7 +751,7 @@ export async function executeSearch(
 
   console.log(`[Search] Inflated ${finalResults.length} atoms into ${inflatedResults.length} context windows.`);
 
-  return formatResults(inflatedResults, maxChars);
+  return await formatResults(inflatedResults, maxChars);
 }
 
 /**
@@ -808,7 +808,7 @@ export async function executeMoleculeSearch(
 
   console.log(`[MoleculeSearch] Combined results from ${molecules.length} molecules: ${allResults.length} total results`);
 
-  return formatResults(allResults, maxChars); // Use original maxChars to maintain token budget
+  return await formatResults(allResults, maxChars); // Use original maxChars to maintain token budget
 }
 
 /**
@@ -820,11 +820,11 @@ export async function runTraditionalSearch(query: string, buckets: string[]): Pr
 
   let querySql = `
     SELECT a.id,
-           ts_rank(to_tsvector(a.content), plainto_tsquery($1)) as score,
+           ts_rank(to_tsvector('simple', a.content), plainto_tsquery('simple', $1)) as score,
            a.content, a.source_path as source, a.timestamp,
            a.buckets, a.tags, 'epoch_placeholder' as epochs, a.provenance
     FROM atoms a
-    WHERE to_tsvector(a.content) @@ plainto_tsquery($1)
+    WHERE to_tsvector('simple', a.content) @@ plainto_tsquery('simple', $1)
   `;
 
   if (buckets.length > 0) {
@@ -864,20 +864,27 @@ function getItems(input: string[] | undefined): string[] {
  * Format search results within character budget
  * Uses molecular coordinates (start_byte/end_byte) for precise content slicing
  */
-function formatResults(results: SearchResult[], maxChars: number): { context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any } {
+async function formatResults(results: SearchResult[], maxChars: number): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
   // Extract molecular slices when coordinates are available
-  const candidates = results.map(r => {
+  const candidates = await Promise.all(results.map(async r => {
     let content = r.content || '';
 
     // Use molecular coordinates for precise slicing if available, but skip if already inflated
-    if (!r.is_inflated && r.start_byte !== undefined && r.end_byte !== undefined && r.start_byte >= 0 && r.end_byte > r.start_byte) {
+    if (!r.is_inflated && r.compound_id && r.start_byte !== undefined && r.end_byte !== undefined && r.start_byte >= 0 && r.end_byte > r.start_byte) {
       try {
-        // Extract the molecular slice from the full content
-        const contentBuffer = Buffer.from(content, 'utf8');
-        const sliceBuffer = contentBuffer.subarray(r.start_byte, r.end_byte);
-        content = sliceBuffer.toString('utf8');
+        // Fetch the full compound document to extract the precise slice
+        const compoundQuery = `SELECT compound_body FROM compounds WHERE id = $1`;
+        const compoundResult = await db.run(compoundQuery, [r.compound_id]);
+
+        if (compoundResult.rows && compoundResult.rows.length > 0) {
+          const fullBody = compoundResult.rows[0][0] as string;
+          const contentBuffer = Buffer.from(fullBody, 'utf8');
+          const sliceBuffer = contentBuffer.subarray(r.start_byte!, r.end_byte!);
+          content = `...${sliceBuffer.toString('utf8')}...`;
+        }
       } catch (e) {
-        // Fallback to full content if slicing fails
+        // Fallback to content field if coordinate extraction fails
+        console.warn(`[Search] Coordinate extraction failed for ${r.id}:`, e);
       }
     }
 
@@ -889,7 +896,7 @@ function formatResults(results: SearchResult[], maxChars: number): { context: st
       score: r.score,
       type: r.type  // Pass type for potential downstream use
     };
-  });
+  }));
 
   const tokenBudget = Math.floor(maxChars / 4);
   const rollingContext = composeRollingContext("query_placeholder", candidates, tokenBudget);
@@ -1109,7 +1116,7 @@ export async function smartChatSearch(
   console.log(`[SmartSearch] Merged Total: ${mergedResults.length} atoms.`);
 
   // 5. Re-Format
-  const formatted = formatResults(mergedResults, maxChars * 1.5);
+  const formatted = await formatResults(mergedResults, maxChars * 1.5);
   return { ...formatted, strategy: 'split_merge', splitQueries: entities };
 }
 
