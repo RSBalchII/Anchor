@@ -309,15 +309,9 @@ cd ECE_Core
 pnpm install
 ```
 
-### 1.5. Platform Specific Setup (CRITICAL)
-**You must manually place the database binary for your OS.** The engine uses a hybrid architecture that requires the native `cozo-node` binary to be explicitly located in the `engine/` root.
-
-1.  **Locate the Binary**: After `pnpm install`, search your `node_modules` for `cozo_node_prebuilt.node`.
-    *   *Tip*: It is usually deep in `node_modules/.pnpm/cozo-node@.../native/`.
-2.  **Copy & Rename**: Copy the file to the `engine/` folder and rename it based on your OS:
-    *   **Windows**: `engine/cozo_node_win32.node`
-    *   **macOS**: `engine/cozo_node_darwin.node`
-    *   **Linux**: `engine/cozo_node_linux.node`
+### 1.5. Platform Specific Setup
+*   **Universal**: No manual binary placement required. The engine now uses **PGlite** (Postgres in WASM) for universal compatibility.
+*   **Native Modules**: Automatically built via `npm run build:native`.
 
 ### 2. Configuration
 

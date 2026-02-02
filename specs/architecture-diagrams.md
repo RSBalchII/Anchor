@@ -200,14 +200,4 @@ graph LR
     I --> J[Electron App<br/>Windows, macOS, Linux]
     
     J --> K[Deployment<br/>Distribute to users]
-    
-    subgraph "Platform-Specific"
-        L[Windows<br/>cozo_node_win32.node]
-        M[macOS<br/>cozo_node_darwin.node]
-        N[Linux<br/>cozo_node_linux.node]
-    end
-    
-    H --> L
-    H --> M
-    H --> N
 ```

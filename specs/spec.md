@@ -116,6 +116,23 @@ The system implements "Tag Emergence" where semantic tags emerge from the intera
 - When location references appear → `#Location` tag
 - **Stateless Contextual Chat Protocol (Standard 084)**: Context-first, stateless interaction model that grounds each response in relevant ECE data without session memory.
 
+### Operating Modes (Standard 088)
+
+The system supports two distinct operating modes depending on hardware capabilities and network topology:
+
+#### Mode A: Full Local (Monolith) - *Default*
+*   **Role**: Maximizes privacy and simplicity.
+*   **Topology**: All components (Vector DB, Graph, LLM, UI) run on a single machine.
+*   **Use Case**: Laptops, offline environments, or single powerful workstations.
+
+#### Mode B: Split-Brain (Distributed)
+*   **Role**: Maximizes performance by offloading heavy inference.
+*   **Topology**:
+    *   **Body (ECE Core)**: Runs on local device (e.g., Laptop). Handles memory, graph storage, and retrieval.
+    *   **Brain (Inference Server)**: Runs on dedicated compute node (e.g., Desktop/Server). Handles heavy LLM inference (GLM-4, Qwen).
+    *   **Bridge**: Connected via local network or Tailscale.
+*   **Use Case**: Multi-device setups where a lightweight laptop connects to a heavy compute server.
+
 ## Core Architecture
 
 ### 1. The Core (Node.js/C++ Hybrid Monolith)
