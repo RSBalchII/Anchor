@@ -97,7 +97,7 @@ export const SearchColumn = memo(({
             if (data.results) {
                 // [Consistency] Sort by Date (Oldest to Newest) to match Agent RAG logic
                 const sortedResults = data.results.sort((a: any, b: any) => {
-                    return new Date(a.date).getTime() - new Date(b.date).getTime();
+                    return (a.timestamp || 0) - (b.timestamp || 0);
                 });
 
                 // [Consistency] Re-generate Context String to match Agent's view (~500 chars/item, ~8000 chars total)
@@ -106,7 +106,8 @@ export const SearchColumn = memo(({
                 const formattedContextEntries = sortedResults.map((r: any) => {
                     if (currentLength >= MAX_CONTEXT_CHARS) return null;
                     const contentSnippet = r.content.substring(0, 500);
-                    const entry = `- [${r.date}] ${contentSnippet}...`;
+                    const dateStr = r.timestamp ? new Date(r.timestamp).toISOString() : 'unknown';
+                    const entry = `- [${dateStr}] ${contentSnippet}...`;
                     if (currentLength + entry.length > MAX_CONTEXT_CHARS) return null;
                     currentLength += entry.length;
                     return entry;

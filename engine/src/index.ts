@@ -69,12 +69,12 @@ async function startServer() {
     const { config } = await import("./config/index.js");
     try {
       await dream();
-    } catch (e) {}
+    } catch (e) { }
 
     setInterval(async () => {
       try {
         await dream();
-      } catch (e) {}
+      } catch (e) { }
     }, config.DREAM_INTERVAL_MS);
   } catch (error) {
     console.error("Failed to start:", error);

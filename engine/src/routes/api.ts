@@ -218,12 +218,12 @@ export function setupRoutes(app: Application) {
 
       // Check if this is a semantic/relationship query
       const isSemanticQuery = req.body.semantic ||
-                             req.body.relationship ||
-                             req.body.narrative ||
-                             (body.query.toLowerCase().includes('relationship') ||
-                              body.query.toLowerCase().includes('with') ||
-                              body.query.toLowerCase().includes('and') && body.query.toLowerCase().includes('jade') ||
-                              body.query.toLowerCase().includes('rob'));
+        req.body.relationship ||
+        req.body.narrative ||
+        (body.query.toLowerCase().includes('relationship') ||
+          body.query.toLowerCase().includes('with') ||
+          body.query.toLowerCase().includes('and') && body.query.toLowerCase().includes('jade') ||
+          body.query.toLowerCase().includes('rob'));
 
       let result;
       if (isSemanticQuery) {
@@ -335,9 +335,22 @@ export function setupRoutes(app: Application) {
   // Get all buckets
   app.get('/v1/buckets', async (_req: Request, res: Response) => {
     try {
-      const result = await db.run('SELECT DISTINCT unnest(buckets) as bucket FROM atoms WHERE buckets IS NOT NULL');
-      const buckets = result.rows ? [...new Set(result.rows.map((row: any) => row[0]))].sort() : [];
-      res.status(200).json(buckets);
+      // Unnesting ALL atoms crashes WASM memory. We fetch raw arrays and dedupe in JS.
+      const result = await db.run('SELECT buckets FROM atoms WHERE buckets IS NOT NULL LIMIT 5000');
+      const allBuckets = new Set<string>();
+
+      if (result.rows) {
+        for (const row of result.rows) {
+          const bucketArr = row[0];
+          if (Array.isArray(bucketArr)) {
+            bucketArr.forEach((b: string) => allBuckets.add(b));
+          } else if (typeof bucketArr === 'string') {
+            allBuckets.add(bucketArr);
+          }
+        }
+      }
+
+      res.status(200).json([...allBuckets].sort());
     } catch (error) {
       console.error('Bucket retrieval error:', error);
       res.status(500).json({ error: 'Failed to retrieve buckets' });
@@ -347,9 +360,22 @@ export function setupRoutes(app: Application) {
   // Get all tags
   app.get('/v1/tags', async (_req: Request, res: Response) => {
     try {
-      const result = await db.run('SELECT DISTINCT unnest(tags) as tag FROM atoms WHERE tags IS NOT NULL');
-      const tags = result.rows ? [...new Set(result.rows.map((row: any) => row[0]))].sort() : [];
-      res.status(200).json(tags);
+      // Unnesting ALL atoms crashes WASM memory. We fetch raw arrays and dedupe in JS.
+      const result = await db.run('SELECT tags FROM atoms WHERE tags IS NOT NULL LIMIT 5000');
+      const allTags = new Set<string>();
+
+      if (result.rows) {
+        for (const row of result.rows) {
+          const tagArr = row[0];
+          if (Array.isArray(tagArr)) {
+            tagArr.forEach((t: string) => allTags.add(t));
+          } else if (typeof tagArr === 'string') {
+            allTags.add(tagArr);
+          }
+        }
+      }
+
+      res.status(200).json([...allTags].sort());
     } catch (error) {
       console.error('Tag retrieval error:', error);
       res.status(500).json({ error: 'Failed to retrieve tags' });
