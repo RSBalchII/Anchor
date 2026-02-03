@@ -601,11 +601,21 @@ export class AtomizerService {
     }
 
     private generateSimHash(text: string): string {
-        if (native && native.fingerprint) {
-            try {
-                return native.fingerprint(text).toString(16);
-            } catch (e) { return "0"; }
+        // NATIVE DISABLED FOR STABILITY
+        // if (native && native.fingerprint) {
+        //     try {
+        //         return native.fingerprint(text).toString(16);
+        //     } catch (e) { return "0"; }
+        // }
+        
+        // JS Fallback: Simple Jenkins Hash or similar
+        let hash = 0;
+        if (text.length === 0) return "0";
+        for (let i = 0; i < text.length; i++) {
+            const char = text.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
         }
-        return "0";
+        return Math.abs(hash).toString(16);
     }
 }
