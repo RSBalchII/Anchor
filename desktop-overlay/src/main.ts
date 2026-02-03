@@ -95,29 +95,36 @@ function createTray() {
 
   try {
     // Create a basic tray
-    tray = new Tray(process.platform === 'win32' ? path.join(__dirname, '../../frontend/public/vite.svg') : iconPath);
+    // If icon is missing, just log and continue without tray (or use empty image if possible on platform)
+    // tray = new Tray(...) 
 
-    const contextMenu = Menu.buildFromTemplate([
-      { label: 'Sovereign Context Engine', enabled: false },
-      { type: 'separator' },
-      { label: 'Status: Initializing', id: 'status', enabled: false },
-      { type: 'separator' },
-      { label: 'Open Web UI', click: () => shell.openExternal(FRONTEND_URL) },
-      {
-        label: 'Restart Engine', click: () => {
-          if (engineProcess) engineProcess.kill();
-          startEngine();
-        }
-      },
-      { type: 'separator' },
-      { label: 'Quit', click: () => app.quit() }
-    ]);
+    const iconFile = process.platform === 'win32' ? path.join(__dirname, '../../frontend/public/vite.svg') : iconPath;
+    if (fs.existsSync(iconFile)) {
+      tray = new Tray(iconFile);
+      const contextMenu = Menu.buildFromTemplate([
+        { label: 'Sovereign Context Engine', enabled: false },
+        { type: 'separator' },
+        { label: 'Status: Initializing', id: 'status', enabled: false },
+        { type: 'separator' },
+        { label: 'Open Web UI', click: () => shell.openExternal(FRONTEND_URL) },
+        {
+          label: 'Restart Engine', click: () => {
+            if (engineProcess) engineProcess.kill();
+            startEngine();
+          }
+        },
+        { type: 'separator' },
+        { label: 'Quit', click: () => app.quit() }
+      ]);
 
-    tray.setToolTip('Sovereign Context Engine');
-    tray.setContextMenu(contextMenu);
+      tray.setToolTip('Sovereign Context Engine');
+      tray.setContextMenu(contextMenu);
+    } else {
+      log(`[WARN] Tray icon not found at ${iconFile} - Tray disabled.`);
+    }
 
   } catch (e) {
-    log('Failed to create Tray icon (likely missing asset): ' + e);
+    log('Failed to create Tray icon: ' + e);
   }
 }
 

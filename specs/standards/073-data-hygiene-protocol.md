@@ -62,6 +62,15 @@ Context is derived from the filesystem path, not just the content.
     *   `/tests/` -> `#test`
     *   `/specs/` -> `#specs`
 
+### 3.3 Density-Aware Scrubber (The Ghost Buster)
+**Context**: Large language models often hallucinate their own previous outputs (e.g., "[Source: ...]" headers) into new content if not sanitized.
+*   **Protocol**: All content must be scrubbed of provenance artifacts **before** atomization.
+*   **Regex Targets**:
+    *   `[Source: ...]` headers (Non-greedy safety: `.*?`).
+    *   YAML keys: `response_content: |-`, `content: |-`, `thinking_content:`.
+    *   LLM Role Markers: `<|user|>`, `<|assistant|>`.
+*   **Safety Rule**: Regex must be non-greedy to prevent "Access Violation" memory crashes on large files.
+
 ---
 
 ## 4. Layer 3: Ingestion (The Librarian)

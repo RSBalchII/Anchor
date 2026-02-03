@@ -44,6 +44,12 @@ Gap: bytes 1201-1249 (likely metadata/comments)
 Inflate: Combine A + gap content + B for coherent window
 ```
 
+### 4. Database Compatibility (PGlite/WASM)
+**Constraint**: The `PGlite` WASM engine has strict memory limits and SQL parser quirks.
+*   **Rule 1: No Massive Allocations**: Do not fetch `compound_body` > 1MB in a single `SELECT`. Use `length()` checks first.
+*   **Rule 2: SUBSTR over SUBSTRING**: Use `substr(col, start, len)` instead of ANSI `substring(col from x for y)` to avoid "invalid escape string" parser crashes.
+*   **Rule 3: Chunked Inflation**: If content > MaxSafeSize, fetch in chunks to prevent WASM heap overflow.
+
 ## Implementation Requirements
 
 ### 1. Inflation Engine

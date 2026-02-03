@@ -148,6 +148,33 @@ export class AtomizerService {
         clean = clean.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[IP_REDACTED]');
         clean = clean.replace(/sk-[a-zA-Z0-9]{32,}/g, 'sk-[REDACTED]');
 
+        // --- DENSITY-AWARE SCRUBBER (Standard 073) ---
+        // Specifically targets "Ghost in the Machine" artifacts where the context engine
+        // re-indexes its own previous output dumps.
+
+        // 1. Strip "Dirty Read" Source Headers (Context Injection Artifacts)
+        // Matches: [Source: inbox\1-19-2026.md] or [Source: ...] (Timestamp: ...)
+        // SAFETY: Use .*? to be non-greedy and avoid spanning massive blocks.
+        clean = clean.replace(/\[Source: .*?\](?:\s*\(Timestamp: .*?\))?/g, '');
+
+        // 2. Strip Logging/YAML Wrappers (Aggressive)
+        // Matches: "response_content": |-, response_content: |-, "content": ...
+        clean = clean.replace(/["']?response_content["']?:\s*\|-?\s*/g, '');
+        clean = clean.replace(/["']?content["']?:\s*\|-?\s*/g, '');
+        clean = clean.replace(/["']?thinking_content["']?:\s*""\s*/g, '');
+
+        // Matches: timestamp: "2026-..." (common in YAML logs)
+        clean = clean.replace(/["']?timestamp["']?:\s*"[^"]*"\s*/g, '');
+
+        // Matches: - type: "User" or - type: "Coda..."
+        clean = clean.replace(/- type:\s*"[^"]*"\s*/g, '');
+
+        // 3. Strip LLM Role Markers
+        clean = clean.replace(/<\|user\|>/g, '');
+        clean = clean.replace(/<\|assistant\|>/g, '');
+        clean = clean.replace(/<\|system\|>/g, '');
+
+
         // 3. JSON Artifact Removal (The Key Assassin)
         const isJsonLog = !/\.(ts|js|py|rs|go|java|cpp|h|c)$/.test(filePath) && (
             clean.includes('"response_content":') ||

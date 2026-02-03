@@ -11,6 +11,7 @@ import { SemanticCategory } from '../../types/taxonomy.js';
 import { parseNaturalLanguage, expandQuery } from '../nlp/query-parser.js';
 import { ContextInflator } from '../search/context-inflator.js';
 
+
 interface SearchResult {
   id: string;
   content: string;
@@ -34,7 +35,7 @@ interface SearchResult {
 export async function executeSemanticSearch(
   query: string,
   buckets?: string[],
-  maxChars: number = 524288,
+  maxChars: number = 5242,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = []
 ): Promise<{
@@ -79,14 +80,17 @@ export async function executeSemanticSearch(
   // Use OR-based logic (|) on filtered keywords to allow conversational queries ("fuzzy" match)
   const tsQueryString = searchTerms.filter(t => t.trim().length > 0).join(' | ');
 
-  let searchQuery = `SELECT a.id, a.content, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
-         ts_rank(to_tsvector('simple', a.content), to_tsquery('simple', $1)) as score,
+  // NOTE: optimization - we do NOT select a.content to prevent fetching massive blobs.
+  // We read from disk using coordinates.
+  let searchQuery = `SELECT a.id, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
+         0 as score,
          COALESCE(m.compound_id, a.compound_id) as compound_id,
          COALESCE(m.start_byte, a.start_byte) as start_byte,
          COALESCE(m.end_byte, a.end_byte) as end_byte
     FROM atoms a
     LEFT JOIN molecules m ON a.id = m.id
-    WHERE to_tsvector('simple', a.content) @@ to_tsquery('simple', $1)`;
+    WHERE to_tsvector('simple', substring(a.content from 1 for 1000)) @@ to_tsquery('simple', $1)`;
+
 
   // Build query filters and parameters
   const queryFilters: string[] = [];
@@ -103,24 +107,24 @@ export async function executeSemanticSearch(
   // Add bucket filters if specified
   if (buckets && buckets.length > 0) {
     paramCounter++;
-    queryFilters.push(`EXISTS (
-      SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${paramCounter})
-    )`);
+    queryFilters.push(`EXISTS(
+    SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${paramCounter})
+  )`);
     sqlParams.push(buckets);
   }
 
   // Add tag filters if specified
   if (scopeTags.length > 0) {
     paramCounter++;
-    queryFilters.push(`EXISTS (
-      SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${paramCounter})
-    )`);
+    queryFilters.push(`EXISTS(
+    SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${paramCounter})
+  )`);
     sqlParams.push(scopeTags);
   }
 
   // Combine all filter clauses with AND
   if (queryFilters.length > 0) {
-    searchQuery += ` AND ${queryFilters.join(' AND ')}`;
+    searchQuery += ` AND ${queryFilters.join(' AND ')} `;
   }
 
   // Complete the query with ordering and limit
@@ -135,19 +139,40 @@ export async function executeSemanticSearch(
 
     for (const row of rows) {
       // Ensure row has the expected structure
-      if (row.length < 13) continue; // Skip malformed rows
+      // Indices shifted because a.content (was index 1) is removed
+      // 0: id
+      // 1: source
+      // 2: timestamp
+      // 3: buckets
+      // 4: tags
+      // 5: epochs
+      // 6: provenance
+      // 7: simhash
+      // 8: score
+      // 9: compound_id
+      // 10: start_byte
+      // 11: end_byte
 
-      const content = typeof row[1] === 'string' ? row[1] : String(row[1] || '');
-      const rowBuckets = Array.isArray(row[4]) ? row[4] as string[] : (typeof row[4] === 'string' ? [row[4]] : []);
-      const rowTags = Array.isArray(row[5]) ? row[5] as string[] : (typeof row[5] === 'string' ? [row[5]] : []);
+      if (row.length < 12) continue; // Skip malformed rows
+
+      const id = String(row[0] || '');
+      const source = String(row[1] || '');
+      const startByte = typeof row[10] === 'number' ? row[10] : Number(row[10]);
+      const endByte = typeof row[11] === 'number' ? row[11] : Number(row[11]);
+
+      let content = '';
+      // Content hydration is now handled by ContextInflator reading from disk.
+
+      const rowBuckets = Array.isArray(row[3]) ? row[3] as string[] : (typeof row[3] === 'string' ? [row[3]] : []);
+      const rowTags = Array.isArray(row[4]) ? row[4] as string[] : (typeof row[4] === 'string' ? [row[4]] : []);
 
       // Calculate semantic relevance score
       let score = calculateSemanticScore(content, queryEntities, searchTerms, entityPairs);
 
       // Apply provenance boost
-      if (provenance === 'internal' && String(row[7] || '') === 'internal') {
+      if (provenance === 'internal' && String(row[6] || '') === 'internal') {
         score *= 2.0;
-      } else if (provenance === 'external' && String(row[7] || '') !== 'internal') {
+      } else if (provenance === 'external' && String(row[6] || '') !== 'internal') {
         score *= 1.5;
       }
 
@@ -157,22 +182,22 @@ export async function executeSemanticSearch(
 
       // Create result object with proper structure
       const searchResult: SearchResult = {
-        id: String(row[0] || ''),
-        content: content,  // Content is at index 1
-        source: String(row[2] || ''),
-        timestamp: typeof row[3] === 'number' ? row[3] : Date.now(),
+        id: id,
+        content: content,
+        source: source,
+        timestamp: typeof row[2] === 'number' ? row[2] : Date.now(),
         buckets: rowBuckets,
         tags: rowTags,
-        epochs: String(row[6] || ''),
-        provenance: String(row[7] || ''),
-        molecular_signature: String(row[8] || ''),
-        score: typeof row[9] === 'number' ? row[9] : 0,  // Score is at index 9
+        epochs: String(row[5] || ''),
+        provenance: String(row[6] || ''),
+        molecular_signature: String(row[7] || ''),
+        score: typeof row[8] === 'number' ? row[8] : 0,
         semanticCategories,
         relatedEntities: relationshipEntities.length > 0 ? relationshipEntities : undefined,
         // Inflation Metadata
-        compound_id: String(row[10] || ''),  // compound_id is now at index 10
-        start_byte: typeof row[11] === 'number' ? row[11] : Number(row[11]),  // start_byte is now at index 11
-        end_byte: typeof row[12] === 'number' ? row[12] : Number(row[12])   // end_byte is now at index 12
+        compound_id: String(row[9] || ''),
+        start_byte: startByte,
+        end_byte: endByte
       };
 
       processedResults.push(searchResult);
@@ -212,7 +237,8 @@ export async function executeSemanticSearch(
           finalContent = finalContent.substring(0, remainingBudget) + '...';
         }
 
-        context += `[Source: ${res.source || 'unknown'}] (Timestamp: ${new Date(res.timestamp).toISOString()})\n${finalContent}\n\n`;
+        context += `[Source: ${res.source || 'unknown'}](Timestamp: ${new Date(res.timestamp).toISOString()
+          }) \n${finalContent} \n\n`;
         totalChars += finalContent.length;
 
         // Push modified result with truncated content
@@ -229,7 +255,7 @@ export async function executeSemanticSearch(
       context,
       results: finalResults,
       toAgentString: () => {
-        return finalResults.map(r => `[${r.source}] ${r.content}`).join('\n\n');
+        return finalResults.map(r => `[${r.source}] ${r.content} `).join('\n\n');
       },
       strategy: 'semantic_relationship',
       splitQueries: entityPairs,
@@ -343,8 +369,8 @@ function findEntityPairs(content: string, queryEntities: string[]): string[] {
   const pairs: string[] = [];
   for (let i = 0; i < foundEntities.length; i++) {
     for (let j = i + 1; j < foundEntities.length; j++) {
-      pairs.push(`${foundEntities[i]}_${foundEntities[j]}`);
-      pairs.push(`${foundEntities[j]}_${foundEntities[i]}`); // Bidirectional
+      pairs.push(`${foundEntities[i]}_${foundEntities[j]} `);
+      pairs.push(`${foundEntities[j]}_${foundEntities[i]} `); // Bidirectional
     }
   }
 

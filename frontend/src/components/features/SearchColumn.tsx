@@ -95,22 +95,41 @@ export const SearchColumn = memo(({
             });
 
             if (data.results) {
+                // [Consistency] Sort by Date (Oldest to Newest) to match Agent RAG logic
+                const sortedResults = data.results.sort((a: any, b: any) => {
+                    return new Date(a.date).getTime() - new Date(b.date).getTime();
+                });
+
+                // [Consistency] Re-generate Context String to match Agent's view (~500 chars/item, ~8000 chars total)
+                let currentLength = 0;
+                const MAX_CONTEXT_CHARS = 8000;
+                const formattedContextEntries = sortedResults.map((r: any) => {
+                    if (currentLength >= MAX_CONTEXT_CHARS) return null;
+                    const contentSnippet = r.content.substring(0, 500);
+                    const entry = `- [${r.date}] ${contentSnippet}...`;
+                    if (currentLength + entry.length > MAX_CONTEXT_CHARS) return null;
+                    currentLength += entry.length;
+                    return entry;
+                }).filter(Boolean);
+
+                const newContextString = formattedContextEntries.join('\n');
+
                 // Create a new array with unique identifiers to force re-render
-                const updatedResults = data.results.map((result: any, index: number) => ({
+                const updatedResults = sortedResults.map((result: any, index: number) => ({
                     ...result,
                     // Add a unique key that changes with each search to force re-render
                     _searchId: `${result.id || index}_${Date.now()}_${Math.random()}`
                 }));
 
                 setResults(updatedResults);
-                setContext(data.context || '');
+                setContext(newContextString); // Use our consistent context string
                 setMetadata(data.metadata);
 
                 // Explicitly sync to parent to ensure global Copy button works immediately
-                onContextUpdate(id, data.context || '');
+                onContextUpdate(id, newContextString);
 
                 if (onFullUpdate) {
-                    const fullText = (data.results || []).map((r: any) => `[${r.provenance}] ${r.source}:\n${r.content}`).join('\n\n');
+                    const fullText = (updatedResults || []).map((r: any) => `[${r.provenance}] ${r.source}:\n${r.content}`).join('\n\n');
                     onFullUpdate(id, fullText);
                 }
 

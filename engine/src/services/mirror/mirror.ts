@@ -40,89 +40,91 @@ export async function createMirror() {
 
     fs.mkdirSync(MIRRORED_BRAIN_PATH, { recursive: true });
 
-    // Fetch atoms with sequence and provenance for proper bundling and re-hydration
-    const query = 'SELECT id, timestamp, content, source_path as source, type, hash, buckets, tags, sequence, provenance FROM atoms';
-    const result = await db.run(query);
+    // Batch processing to avoid WASM OOM
+    const BATCH_SIZE = 500;
+    let offset = 0;
+    let hasMore = true;
 
-    if (!result.rows || result.rows.length === 0) {
+    // Grouping structure: Map<FullPathString, Map<SourcePath, Atom[]>>
+    const directoryGroups = new Map<string, Map<string, any[]>>();
+
+    while (hasMore) {
+        console.log(`🪞 Mirror: Fetching batch offset ${offset}...`);
+        const query = `SELECT id, timestamp, content, source_path as source, type, hash, buckets, tags, sequence, provenance FROM atoms LIMIT ${BATCH_SIZE} OFFSET ${offset}`;
+        const result = await db.run(query);
+
+        if (!result.rows || result.rows.length === 0) {
+            hasMore = false;
+            break;
+        }
+
+        for (const row of result.rows) {
+            // Handle both array and object formats
+            let id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance;
+
+            if (Array.isArray(row)) {
+                [id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance] = row;
+            } else {
+                id = row.id;
+                timestamp = row.timestamp;
+                content = row.content;
+                source = row.source;
+                type = row.type;
+                hash = row.hash;
+                buckets = row.buckets;
+                tags = row.tags;
+                sequence = row.sequence;
+                provenance = row.provenance;
+            }
+
+            const bucketList = (buckets as string[]) || [];
+            const tagList = (tags as string[]) || [];
+            const primaryBucket = bucketList.length > 0 ? bucketList[0] : 'general';
+
+            // 1. Determine Root Bucket
+            let bucketName = (primaryBucket && primaryBucket !== 'general' && primaryBucket !== 'unknown') ? primaryBucket : 'general';
+
+            // QUARANTINE OVERRIDE
+            const isQuarantined = tagList.includes('#manually_quarantined') || tagList.includes('#auto_quarantined');
+            if (isQuarantined) {
+                bucketName = 'quarantine';
+            }
+
+            // 2. Determine Tag Path
+            const specificTags = tagList.filter((t: string) => t !== bucketName && t !== 'inbox');
+            specificTags.sort();
+
+            const pathSegments = [`@${sanitizeFilename(bucketName)}`];
+            if (specificTags.length > 0) {
+                specificTags.forEach(t => pathSegments.push(`#${sanitizeFilename(t)}`));
+            } else {
+                pathSegments.push('#_untagged');
+            }
+
+            const relativePath = path.join(...pathSegments);
+
+            // 3. Add to Group
+            if (!directoryGroups.has(relativePath)) directoryGroups.set(relativePath, new Map());
+            const sourceMap = directoryGroups.get(relativePath)!;
+
+            const sourcePath = (source as string) || 'unknown';
+            if (!sourceMap.has(sourcePath)) sourceMap.set(sourcePath, []);
+
+            sourceMap.get(sourcePath)!.push({
+                id, timestamp, content, source: sourcePath, type, hash, buckets: bucketList, tags: tagList, sequence: sequence || 0, provenance
+            });
+        }
+
+        offset += BATCH_SIZE;
+        // Safety break if needed, but pagination should work
+    }
+
+    if (directoryGroups.size === 0) {
         console.log('🪞 Mirror Protocol: No memories to mirror.');
         return;
     }
 
-    console.log(`🪞 Mirror Protocol: Processing ${result.rows.length} memories for hierarchical bundling...`);
-
-    // Grouping structure: Map<FullPathString, Map<SourcePath, Atom[]>>
-    // We group by Target Directory Path -> Then by Source File (Original Provenance)
-    const directoryGroups = new Map<string, Map<string, any[]>>();
-
-    for (const row of result.rows) {
-        // Handle both array and object formats that PGlite might return
-        let id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance;
-
-        if (Array.isArray(row)) {
-            // Row is in array format [id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance]
-            [id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance] = row;
-        } else {
-            // Row is in object format {id, timestamp, content, source, type, hash, buckets, tags, sequence, provenance}
-            id = row.id;
-            timestamp = row.timestamp;
-            content = row.content;
-            source = row.source;
-            type = row.type;
-            hash = row.hash;
-            buckets = row.buckets;
-            tags = row.tags;
-            sequence = row.sequence;
-            provenance = row.provenance;
-        }
-
-        const bucketList = (buckets as string[]) || [];
-        const tagList = (tags as string[]) || [];
-        const primaryBucket = bucketList.length > 0 ? bucketList[0] : 'general';
-
-        // 1. Determine Root Bucket
-        let bucketName = (primaryBucket && primaryBucket !== 'general' && primaryBucket !== 'unknown') ? primaryBucket : 'general';
-
-        // QUARANTINE OVERRIDE
-        const isQuarantined = tagList.includes('#manually_quarantined') || tagList.includes('#auto_quarantined');
-        if (isQuarantined) {
-            bucketName = 'quarantine';
-        }
-
-        // 2. Determine Tag Path
-        // Filter out the bucket name itself and 'inbox' to avoid redundancy
-        const specificTags = tagList.filter((t: string) => t !== bucketName && t !== 'inbox');
-
-        // Sort tags alphabetically to ensure deterministic nesting order
-        // e.g. ["#z", "#a"] -> "#a/#z" path
-        specificTags.sort();
-
-        // Construct Path segments
-        // starting with @bucket
-        const pathSegments = [`@${sanitizeFilename(bucketName)}`];
-
-        // Append tag segments
-        if (specificTags.length > 0) {
-            specificTags.forEach(t => pathSegments.push(`#${sanitizeFilename(t)}`));
-        } else {
-            // Check if we should use "_untagged" or just root?
-            // Existing logic used "_untagged". Let's stick to that for cleanliness.
-            pathSegments.push('#_untagged');
-        }
-
-        const relativePath = path.join(...pathSegments);
-
-        // 3. Add to Group
-        if (!directoryGroups.has(relativePath)) directoryGroups.set(relativePath, new Map());
-        const sourceMap = directoryGroups.get(relativePath)!;
-
-        const sourcePath = (source as string) || 'unknown';
-        if (!sourceMap.has(sourcePath)) sourceMap.set(sourcePath, []);
-
-        sourceMap.get(sourcePath)!.push({
-            id, timestamp, content, source: sourcePath, type, hash, buckets: bucketList, tags: tagList, sequence: sequence || 0, provenance
-        });
-    }
+    console.log(`🪞 Mirror Protocol: Grouping complete. Writing files...`);
 
     let bundleCount = 0;
     let totalAtoms = 0;

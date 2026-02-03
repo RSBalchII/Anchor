@@ -20,7 +20,7 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
     const memoryUsage = process.memoryUsage();
     const uptime = process.uptime();
     const cpuInfo = os.cpus();
-    
+
     // Check database connectivity
     let dbStatus = 'unknown';
     try {
@@ -29,7 +29,7 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
     } catch (error) {
       dbStatus = 'unhealthy';
     }
-    
+
     // Check if we can write to logs directory
     let logStatus = 'unknown';
     try {
@@ -39,7 +39,7 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
     } catch (error) {
       logStatus = 'unhealthy';
     }
-    
+
     // Determine overall health
     let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
     if (dbStatus === 'unhealthy' || logStatus === 'unhealthy') {
@@ -47,7 +47,7 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
     } else if (dbStatus === 'degraded') {
       overallStatus = 'degraded';
     }
-    
+
     const healthData = {
       status: overallStatus,
       timestamp: new Date().toISOString(),
@@ -73,13 +73,13 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
         nativeModules: 'healthy' // Would check actual native module status in real implementation
       }
     };
-    
+
     // Log health check
     logWithContext.health(overallStatus, {
       components: healthData.components,
       memoryUsed: memoryUsage.heapUsed / 1024 / 1024
     });
-    
+
     const statusCode = overallStatus === 'healthy' ? 200 : overallStatus === 'degraded' ? 207 : 503;
     res.status(statusCode).json(healthData);
   } catch (error: any) {
@@ -96,7 +96,7 @@ monitoringRouter.get('/health', async (_req: Request, res: Response) => {
 monitoringRouter.get('/metrics', (_req: Request, res: Response) => {
   try {
     const metrics = performanceMonitor.getAllStats();
-    
+
     res.status(200).json({
       timestamp: new Date().toISOString(),
       metrics,
@@ -116,7 +116,7 @@ monitoringRouter.get('/metrics', (_req: Request, res: Response) => {
 monitoringRouter.get('/performance-summary', (_req: Request, res: Response) => {
   try {
     const summary = performanceMonitor.getPerformanceSummary();
-    
+
     res.status(200).json({
       timestamp: new Date().toISOString(),
       ...summary
@@ -132,7 +132,7 @@ monitoringRouter.get('/resources', (_req: Request, res: Response) => {
   try {
     const memoryUsage = process.memoryUsage();
     const cpuUsage = process.cpuUsage ? process.cpuUsage() : null;
-    
+
     const resourceData = {
       timestamp: new Date().toISOString(),
       process: {
@@ -157,7 +157,7 @@ monitoringRouter.get('/resources', (_req: Request, res: Response) => {
       },
       disk: getDiskUsage() // Custom function to get disk usage
     };
-    
+
     res.status(200).json(resourceData);
   } catch (error: any) {
     logWithContext.error('Resource usage collection failed', error);
@@ -203,7 +203,7 @@ monitoringRouter.get('/db-health', async (_req: Request, res: Response) => {
       readPermission: false,
       performance: 0
     };
-    
+
     // Check connectivity
     try {
       const result = await db.run('SELECT 1 as a');
@@ -212,11 +212,11 @@ monitoringRouter.get('/db-health', async (_req: Request, res: Response) => {
     } catch (error) {
       // Connectivity failed
     }
-    
+
     // Check write/read permissions with a temporary record
     if (checks.basicQuery) {
       const testId = `health_check_${Date.now()}`;
-      
+
       try {
         // Try to write
         await db.run(
@@ -242,7 +242,7 @@ monitoringRouter.get('/db-health', async (_req: Request, res: Response) => {
         // Write/read failed
       }
     }
-    
+
     // Performance test
     if (checks.basicQuery) {
       const start = performance.now();
@@ -251,18 +251,18 @@ monitoringRouter.get('/db-health', async (_req: Request, res: Response) => {
       }
       checks.performance = (performance.now() - start) / 10; // Average ms per query
     }
-    
-    const overallDbHealth = 
-      checks.connectivity && 
-      checks.basicQuery && 
-      checks.writePermission && 
+
+    const overallDbHealth =
+      checks.connectivity &&
+      checks.basicQuery &&
+      checks.writePermission &&
       checks.readPermission;
-    
-    const dbHealthStatus = overallDbHealth ? 'healthy' : 
+
+    const dbHealthStatus = overallDbHealth ? 'healthy' :
       (checks.connectivity && checks.basicQuery) ? 'degraded' : 'unhealthy';
-    
+
     const statusCode = dbHealthStatus === 'healthy' ? 200 : dbHealthStatus === 'degraded' ? 207 : 503;
-    
+
     res.status(statusCode).json({
       status: dbHealthStatus,
       timestamp: new Date().toISOString(),
@@ -295,7 +295,7 @@ monitoringRouter.get('/native-health', (_req: Request, res: Response) => {
         }
       }
     };
-    
+
     res.status(200).json(nativeModuleStatus);
   } catch (error: any) {
     logWithContext.error('Native module health check failed', error);
@@ -314,19 +314,19 @@ monitoringRouter.get('/ingestion-health', async (_req: Request, res: Response) =
       databaseWrite: false,
       performance: 0
     };
-    
+
     // This would check actual ingestion components in a real implementation
     // For now, we'll simulate the checks
-    
+
     // Simulate checking if atomizer service is responsive
     checks.atomizer = true; // Assume healthy for now
-    
+
     // Simulate checking if sanitizer service is responsive  
     checks.sanitizer = true; // Assume healthy for now
-    
+
     // Simulate checking if fingerprinter service is responsive
     checks.fingerprinter = true; // Assume healthy for now
-    
+
     // Check database write capability (reuse the db check from above)
     try {
       const testId = `ingest_health_${Date.now()}`;
@@ -345,7 +345,7 @@ monitoringRouter.get('/ingestion-health', async (_req: Request, res: Response) =
     } catch (error) {
       // Database write failed
     }
-    
+
     // Performance test for ingestion
     const start = performance.now();
     // Simulate ingestion operations
@@ -354,12 +354,12 @@ monitoringRouter.get('/ingestion-health', async (_req: Request, res: Response) =
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     checks.performance = (performance.now() - start) / 5; // Average ms per operation
-    
+
     const overallIngestHealth = checks.atomizer && checks.sanitizer && checks.fingerprinter && checks.databaseWrite;
     const ingestHealthStatus = overallIngestHealth ? 'healthy' : 'degraded';
-    
+
     const statusCode = ingestHealthStatus === 'healthy' ? 200 : 207;
-    
+
     res.status(statusCode).json({
       status: ingestHealthStatus,
       timestamp: new Date().toISOString(),
@@ -380,7 +380,7 @@ monitoringRouter.get('/search-health', async (_req: Request, res: Response) => {
       resultQuality: false,
       performance: 0
     };
-    
+
     // Check if search index is accessible
     try {
       const result = await db.run('SELECT id FROM atoms LIMIT 1', []);
@@ -392,7 +392,7 @@ monitoringRouter.get('/search-health', async (_req: Request, res: Response) => {
     // Test query processing
     if (checks.searchIndex) {
       try {
-        const result = await db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', content), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', content) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['test']);
+        const result = await db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', substr(content, 1, 5000)), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', substr(content, 1, 5000)) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['test']);
         checks.queryProcessing = result && result.rows && result.rows.length > 0;
       } catch (error) {
         // Query processing failed
@@ -411,12 +411,12 @@ monitoringRouter.get('/search-health', async (_req: Request, res: Response) => {
       }
       checks.performance = (performance.now() - start) / 3; // Average ms per query
     }
-    
+
     const overallSearchHealth = checks.searchIndex && checks.queryProcessing;
     const searchHealthStatus = overallSearchHealth ? 'healthy' : 'degraded';
-    
+
     const statusCode = searchHealthStatus === 'healthy' ? 200 : 207;
-    
+
     res.status(statusCode).json({
       status: searchHealthStatus,
       timestamp: new Date().toISOString(),
@@ -460,7 +460,7 @@ monitoringRouter.get('/status', async (_req: Request, res: Response) => {
       },
       performance: performanceMonitor.getPerformanceSummary()
     };
-    
+
     // Run all health checks in parallel
     const [dbHealth, nativeHealth, ingestHealth, searchHealth] = await Promise.allSettled([
       db.run('SELECT 1 as a', []),
@@ -468,17 +468,17 @@ monitoringRouter.get('/status', async (_req: Request, res: Response) => {
       db.run('SELECT id FROM atoms LIMIT 1', []),
       db.run('SELECT id, content, ts_rank(to_tsvector(\'simple\', content), plainto_tsquery(\'simple\', $1)) as score FROM atoms WHERE to_tsvector(\'simple\', content) @@ plainto_tsquery(\'simple\', $1) LIMIT 1', ['test'])
     ]);
-    
+
     // Update component statuses
     statusData.components.database = dbHealth.status === 'fulfilled' ? 'healthy' : 'unhealthy';
     statusData.components.nativeModules = 'healthy'; // Simplified
     statusData.components.ingestion = ingestHealth.status === 'fulfilled' ? 'healthy' : 'unhealthy';
     statusData.components.search = searchHealth.status === 'fulfilled' ? 'healthy' : 'unhealthy';
-    
+
     // Determine overall status
     const unhealthyComponents = Object.values(statusData.components).filter(status => status === 'unhealthy').length;
     const degradedComponents = Object.values(statusData.components).filter(status => status === 'degraded').length;
-    
+
     if (unhealthyComponents > 0) {
       statusData.status = 'unhealthy';
     } else if (degradedComponents > 0) {
@@ -486,9 +486,9 @@ monitoringRouter.get('/status', async (_req: Request, res: Response) => {
     } else {
       statusData.status = 'healthy';
     }
-    
+
     const statusCode = statusData.status === 'healthy' ? 200 : statusData.status === 'degraded' ? 207 : 503;
-    
+
     res.status(statusCode).json(statusData);
   } catch (error: any) {
     logWithContext.error('Status check failed', error);
@@ -500,7 +500,7 @@ monitoringRouter.get('/status', async (_req: Request, res: Response) => {
 monitoringRouter.get('/counters', (_req: Request, res: Response) => {
   try {
     const counters = performanceMonitor.getAllStats();
-    
+
     res.status(200).json({
       timestamp: new Date().toISOString(),
       counters
@@ -515,7 +515,7 @@ monitoringRouter.get('/counters', (_req: Request, res: Response) => {
 monitoringRouter.post('/counters/reset', (_req: Request, res: Response) => {
   try {
     performanceMonitor.reset();
-    
+
     res.status(200).json({
       status: 'success',
       message: 'Performance counters reset'
@@ -530,7 +530,7 @@ monitoringRouter.post('/counters/reset', (_req: Request, res: Response) => {
 monitoringRouter.get('/slow-operations', (_req: Request, res: Response) => {
   try {
     const slowest = performanceMonitor.getSlowestOperations(10);
-    
+
     res.status(200).json({
       timestamp: new Date().toISOString(),
       slowestOperations: slowest
@@ -545,7 +545,7 @@ monitoringRouter.get('/slow-operations', (_req: Request, res: Response) => {
 monitoringRouter.get('/busiest-operations', (_req: Request, res: Response) => {
   try {
     const busiest = performanceMonitor.getBusiestOperations(10);
-    
+
     res.status(200).json({
       timestamp: new Date().toISOString(),
       busiestOperations: busiest

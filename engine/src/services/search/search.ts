@@ -267,14 +267,22 @@ export async function tagWalkerSearch(
     let anchorQuery = `
         SELECT a.id, a.content, a.source_path as source, a.timestamp,
                a.buckets, a.tags, 'epoch_placeholder' as epochs, a.provenance,
-               70.0 * ts_rank(to_tsvector('simple', a.content), plainto_tsquery('simple', $1)) as score,
+                -- Metadata Relevance Boosting (Crash-Proof)
+                (
+                  (CASE WHEN array_to_string(a.tags, ' ') ILIKE $2 THEN 20 ELSE 0 END) +
+                  (CASE WHEN a.source_path ILIKE $2 THEN 20 ELSE 0 END)
+                ) as score,
                a.sequence, a.simhash as molecular_signature
         FROM atoms a
-        WHERE to_tsvector('simple', a.content) @@ plainto_tsquery('simple', $1)
+        WHERE to_tsvector('simple', substring(a.content from 1 for 1000)) @@ plainto_tsquery('simple', $1)
+        ORDER BY score DESC, a.timestamp DESC
     `;
 
     // Add provenance filter
-    let anchorParams: any[] = [sanitizedQuery];
+    let anchorParams: any[] = [
+      sanitizedQuery,
+      `%${sanitizedQuery}%` // $2 for ILIKE matching
+    ];
 
     if (provenance !== 'all') {
       const provParamIdx = anchorParams.length + 1;

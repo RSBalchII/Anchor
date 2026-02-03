@@ -1,9 +1,12 @@
-
 import { db } from '../../core/db.js';
 import { SearchResult } from './search.js';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import { pathManager } from '../../utils/path-manager.js';
 
 interface ContextWindow {
     compoundId: string;
+    source: string;
     start: number;
     end: number;
     originalResults: SearchResult[];
@@ -24,6 +27,7 @@ export class ContextInflator {
     /**
      * Inflate search results into expanded Context Windows.
      * Supports "Dynamic Density": Scales window size based on available budget and result count.
+     * READS FROM DISK (File System) instead of DB for content.
      */
     static async inflate(results: SearchResult[], totalBudget?: number): Promise<SearchResult[]> {
         const inflatedResults: SearchResult[] = [];
@@ -53,8 +57,6 @@ export class ContextInflator {
                 const budgetPerResult = Math.floor(totalBudget / processingResults.length);
 
                 // Scale window size to available budget (capped at reasonable max to avoid massive single files)
-                // "No char max limit" (User intent) -> But we still need *some* limit to prevent 1 result = 10MB.
-                // We use a loose max (e.g. 5k) if budget permits.
                 maxWindowSize = Math.max(ContextInflator.MIN_WINDOW_CAP, budgetPerResult);
 
                 // Deduce padding
@@ -68,28 +70,28 @@ export class ContextInflator {
         }
 
         // --- Standard Inflation Logic (using dynamic params) ---
-        const compoundsMap = new Map<string, SearchResult[]>();
+        // Group by Source (File Path) instead of Compound ID to ensure we read from correct file
+        const fileMap = new Map<string, SearchResult[]>();
 
-        // 1. Group by Compound ID
         for (const res of processingResults) {
-            if (!res.compound_id || res.start_byte === undefined || res.end_byte === undefined) {
+            if (!res.source || res.start_byte === undefined || res.end_byte === undefined) {
                 inflatedResults.push(res);
                 continue;
             }
-            if (!compoundsMap.has(res.compound_id)) {
-                compoundsMap.set(res.compound_id, []);
+            if (!fileMap.has(res.source)) {
+                fileMap.set(res.source, []);
             }
-            compoundsMap.get(res.compound_id)?.push(res);
+            fileMap.get(res.source)?.push(res);
         }
 
-        // 2. Process each Compound
-        for (const [compoundId, compoundResults] of compoundsMap.entries()) {
-            compoundResults.sort((a, b) => (a.start_byte || 0) - (b.start_byte || 0));
+        // 2. Process each File
+        for (const [sourcePath, fileResults] of fileMap.entries()) {
+            fileResults.sort((a, b) => (a.start_byte || 0) - (b.start_byte || 0));
 
             const windows: ContextWindow[] = [];
             let currentWindow: ContextWindow | null = null;
 
-            for (const res of compoundResults) {
+            for (const res of fileResults) {
                 const rStart = Number(res.start_byte) || 0;
                 const rEnd = Number(res.end_byte) || 0;
 
@@ -97,14 +99,14 @@ export class ContextInflator {
                 let end = rEnd + paddingChars;
 
                 // FORCE CAP: Ensure no single window exceeds MAX_WINDOW_SIZE
-                // Logic update: If maxWindowSize is huge (because high budget), we allow it.
                 if ((end - start) > maxWindowSize) {
                     end = start + maxWindowSize;
                 }
 
                 if (!currentWindow) {
                     currentWindow = {
-                        compoundId,
+                        compoundId: res.compound_id || '',
+                        source: sourcePath,
                         start,
                         end,
                         originalResults: [res]
@@ -119,7 +121,8 @@ export class ContextInflator {
                     } else {
                         windows.push(currentWindow);
                         currentWindow = {
-                            compoundId,
+                            compoundId: res.compound_id || '',
+                            source: sourcePath,
                             start,
                             end,
                             originalResults: [res]
@@ -129,39 +132,52 @@ export class ContextInflator {
             }
             if (currentWindow) windows.push(currentWindow);
 
-            // 3. Fetch Content for Windows
+            // 3. Fetch Content for Windows from DISK
             for (const win of windows) {
                 try {
-                    const query = `SELECT compound_body FROM compounds WHERE id = $1`;
-                    const result = await db.run(query, [win.compoundId]);
+                    const safeStart = Math.max(0, win.start);
+                    // Cap fetch size for sanity
+                    const requestedLength = Math.min(maxWindowSize, win.end - safeStart);
 
-                    if (result.rows && result.rows.length > 0) {
-                        const fullBody = result.rows[0][0] as string;
-                        if (fullBody && fullBody.length > 0) {
-                            const safeStart = Math.max(0, win.start);
-                            const safeEnd = Math.min(fullBody.length, win.end);
-                            const expandedContent = fullBody.substring(safeStart, safeEnd);
+                    let expandedContent = "";
 
-                            const base = win.originalResults[0];
-                            inflatedResults.push({
-                                ...base,
-                                content: `...${expandedContent}...`,
-                                score: Math.max(...win.originalResults.map(r => r.score)),
-                                is_inflated: true,
-                                start_byte: safeStart,
-                                end_byte: safeEnd
-                            });
-                        } else {
-                            // If compound body is empty, use the original content
-                            inflatedResults.push(...win.originalResults);
+                    // Read from Disk
+                    let filePath = win.source;
+                    if (!path.isAbsolute(filePath)) {
+                        // Resolve relative path against Notebook Directory
+                        filePath = path.join(pathManager.getNotebookDir(), filePath);
+                    }
+
+                    const fileHandle = await fs.open(filePath, 'r');
+                    try {
+                        const buffer = Buffer.alloc(requestedLength);
+                        const { bytesRead } = await fileHandle.read(buffer, 0, requestedLength, safeStart);
+                        if (bytesRead > 0) {
+                            expandedContent = buffer.toString('utf-8', 0, bytesRead);
                         }
+                    } finally {
+                        await fileHandle.close();
+                    }
+
+                    if (expandedContent && expandedContent.length > 0) {
+                        const safeEnd = safeStart + expandedContent.length;
+                        const base = win.originalResults[0];
+                        inflatedResults.push({
+                            ...base,
+                            content: `...${expandedContent}...`,
+                            score: Math.max(...win.originalResults.map(r => r.score)),
+                            is_inflated: true,
+                            start_byte: safeStart,
+                            end_byte: safeEnd,
+                            compound_id: win.compoundId
+                        });
                     } else {
-                        // If no compound found, use the original content
+                        // Fallback
                         inflatedResults.push(...win.originalResults);
                     }
                 } catch (e) {
-                    console.error(`[ContextInflator] Failed to inflate compound ${win.compoundId}`, e);
-                    // On error, use the original content
+                    console.error(`[ContextInflator] Failed to inflate window for ${win.source}`, e);
+                    // On error, use the original content (even if empty/partial)
                     inflatedResults.push(...win.originalResults);
                 }
             }
