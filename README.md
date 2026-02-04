@@ -85,13 +85,16 @@ pnpm build
 ### Standards Implemented
 - **Standard 053**: CozoDB Pain Points & OS Compatibility
 - **Standard 059**: Reliable Ingestion Pipeline
-- **Standard 068**: Tag Infection Protocol
-- **Standard 074**: Native Module Acceleration
-- **Standard 081**: Atomic Taxonomy
 - **Standard 088**: Server Startup Sequence (ECONNREFUSED fix)
+- **Standard 094**: Smart Search Protocol (Fuzzy Fallback & GIN Optimization)
 
-## Troubleshooting
-
+### Search Capabilities
+- **Natural Language**: Ask questions in plain English with "Smart Search" intent detection
+- **Fuzzy Fallback**: Automatically retries with broader logic if strict search fails
+- **Dynamic Sorting**: Use keywords like "earliest" or "oldest" to toggle chronological sorting
+- **Tag-Based**: Use hashtags for precise filtering
+- **Temporal**: Filter by date ranges and time periods
+- **Semantic**: Retrieve related concepts and associations via Tag-Walker
 ### Common Issues
 - **ECONNREFUSED**: Fixed in Standard 088 - server starts before database initialization
 - **Slow Startup**: First run includes database initialization (subsequent runs are faster)

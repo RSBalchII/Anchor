@@ -118,32 +118,35 @@ flowchart TD
 ## 3. Tag-Walker Search Protocol
 
 ```mermaid
-graph LR
-    A[User Query<br/>"Rob and Jade relationship"] --> B[Natural Language Parsing<br/>Extract Entities & Temporal Context]
+graph TD
+    A[User Query<br/>"Revenue optimization summary"] --> B[Phase 1: Intelligent Parsing<br/>Remove stopwords & detect intent]
     
-    B --> C[Query Expansion<br/>NLP-based tag extraction]
+    B --> C{Strict Search<br/>GIN Index}
+    C -->|Results Found| D[Anchor set established]
+    C -->|No Results| E[Phase 3: Fuzzy Fallback<br/>Switch to OR-logic]
     
-    C --> D[Phase 1: Anchor Search<br/>70% of token budget<br/>Direct FTS matches]
+    E -->|Results Found| D
+    E -->|No Results| F[Return Empty/Suggestions]
     
-    D --> E[Retrieve Top Molecules<br/>Based on FTS relevance]
+    D --> G[Phase 4: Semantic Walk<br/>Tag-Walker Protocol]
     
-    E --> F[Phase 2: Graph Walk<br/>30% of token budget<br/>Shared tag/bucket neighbors]
+    subgraph "Walk Logic"
+        G --> H{Bucket Filter?}
+        H -->|Yes| I[Strict Sandbox<br/>Only Atoms in same Bucket]
+        H -->|No| J[Global Walk<br/>Cross-Corpus Associates]
+    end
     
-    F --> G[Retrieve Associative Neighbors<br/>Molecules sharing tags but lacking keywords]
+    I --> K[Candidate Neighbors]
+    J --> K
     
-    G --> H[Semantic Category Filtering<br/>Apply #Relationship, #Narrative, etc.]
+    K --> L[Scoring & Ranking<br/>Provenance + Tag Overlap]
     
-    H --> I[Entity Co-occurrence Detection<br/>Boost molecules with multiple entities]
+    L --> M{Sort Intent?}
+    M -->|'Earliest'| N[Sort by Timestamp ASC]
+    M -->|Default| O[Sort by Score + Timestamp DESC]
     
-    I --> J[Provenance Boosting<br/>Sovereign content gets 2-3x boost]
-    
-    J --> K[Active Cleansing<br/>SimHash deduplication]
-    
-    K --> L[Context Inflation<br/>Combine adjacent molecules]
-    
-    L --> M[Final Results<br/>Ranked by composite score]
-    
-    M --> N[Return to LLM<br/>For reasoning and response]
+    N --> P[Final Result Set]
+    O --> P
 ```
 
 ## 4. Native Module Integration
