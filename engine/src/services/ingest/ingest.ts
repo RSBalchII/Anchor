@@ -182,7 +182,8 @@ export interface IngestAtom {
   embedding?: number[];
   hash?: string; // Explicit hash to avoid ID-based guessing
   simhash?: string;
-  tags?: string[]; // <--- NEW FIELD
+  tags?: string[];
+  payload?: any; // Crystal Atom Data (JSONB)
 }
 
 /**
@@ -207,15 +208,16 @@ export async function ingestAtoms(
 
     // Insert the atom
     const atomInsertQuery = `
-      INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance, payload)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (id) DO UPDATE SET
         content = EXCLUDED.content,
         source_path = EXCLUDED.source_path,
         timestamp = EXCLUDED.timestamp,
         simhash = EXCLUDED.simhash,
         embedding = EXCLUDED.embedding,
-        provenance = EXCLUDED.provenance
+        provenance = EXCLUDED.provenance,
+        payload = EXCLUDED.payload
     `;
 
     // Convert simhash to BigInt if it exists
@@ -234,6 +236,9 @@ export async function ingestAtoms(
       embeddingArray = atom.embedding;
     }
 
+    // Prepare Payload (JSONB)
+    const payloadJson = atom.payload ? JSON.stringify(atom.payload) : '{}';
+
     await db.run(atomInsertQuery, [
       atom.id,
       atom.content,
@@ -241,7 +246,8 @@ export async function ingestAtoms(
       atom.timestamp,
       simhashBigInt || 0n,
       embeddingArray,
-      atom.provenance
+      atom.provenance,
+      payloadJson
     ]);
 
     // Insert associated tags

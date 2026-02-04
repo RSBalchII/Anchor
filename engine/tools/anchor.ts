@@ -44,18 +44,42 @@ Type ${colors.yellow}/help${colors.reset} for commands.
 
 rl.prompt();
 
-rl.on('line', async (line) => {
-    const input = line.trim();
 
-    if (input.length === 0) {
+let queryBuffer = '';
+
+rl.on('line', async (line) => {
+    const trimmedLine = line.trim();
+
+    // Command handling (only if buffer empty)
+    if (queryBuffer.length === 0 && trimmedLine.startsWith('/')) {
+        handleCommand(trimmedLine);
         rl.prompt();
         return;
     }
 
-    if (input.startsWith('/')) {
-        handleCommand(input);
+    // Empty input check (only if buffer empty)
+    if (queryBuffer.length === 0 && trimmedLine.length === 0) {
+        rl.prompt();
+        return;
+    }
+
+    // Accumulate input
+    // If it's a new line in a multi-line query, add space/newline
+    if (queryBuffer.length > 0) {
+        queryBuffer += '\n' + line;
     } else {
-        await executeSql(input);
+        queryBuffer = line;
+    }
+
+    // Check for termination (semicolon at end of line)
+    // We strictly require the semicolon for multi-line support
+    if (trimmedLine.endsWith(';')) {
+        await executeSql(queryBuffer);
+        queryBuffer = '';
+        rl.setPrompt(`${colors.cyan}anchor>${colors.reset} `);
+    } else {
+        // Continuation prompt
+        rl.setPrompt(`${colors.dim}   ...>${colors.reset} `);
     }
 
     rl.prompt();

@@ -81,7 +81,8 @@ export class Database {
         { name: 'end_byte', type: 'INTEGER' },
         { name: 'numeric_value', type: 'REAL' },
         { name: 'numeric_unit', type: 'TEXT' },
-        { name: 'source_id', type: 'TEXT' }  // Add the missing source_id column
+        { name: 'source_id', type: 'TEXT' },
+        { name: 'payload', type: 'JSONB' } // Crystal Atom Structure (Hybrid Architecture)
       ];
 
       for (const col of columnsToAdd) {
@@ -261,6 +262,18 @@ export class Database {
       } catch (fallbackErr: any) {
         console.warn("[DB] Could not create fallback text index:", fallbackErr.message);
       }
+    }
+
+    // Create JSONB GIN Index (Crystal Atom Optimization)
+    try {
+      await this.run(`
+        CREATE INDEX IF NOT EXISTS idx_atoms_payload_gin
+        ON atoms
+        USING GIN (payload);
+      `);
+      console.log("[DB] GIN index created for payload (Crystal Atom).");
+    } catch (e: any) {
+      console.warn("[DB] Could not create payload GIN index:", e.message);
     }
 
     // Mark as initialized after all setup is complete
