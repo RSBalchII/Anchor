@@ -34,7 +34,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  DATABASE LAYER                                                │
 ├─────────────────────────────────────────────────────────────────┤
-│  • PGlite Persistence                                          │
+│  • PGlite (PostgreSQL-Compatible)                              │
 │  • Schema Management                                           │
 │  • Query Processing                                            │
 └─────────────────────────────────────────────────────────────────┘
@@ -43,21 +43,26 @@
 ### Startup Sequence (Standard 088 Compliant)
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  STARTUP FLOW                                                  │
+│  OLD SEQUENCE (FAILED)                                         │
 ├─────────────────────────────────────────────────────────────────┤
-│  1. Engine Process Init                                        │
-│  2. HTTP Server Start (Immediate)                             │
-│  3. Database Init (Background)                                │
-│  4. Native Module Loading (Background)                        │
-│  5. Route Setup (Post-DB)                                     │
-│  6. Service Activation                                        │
+│  1. await db.init() ← BLOCKING                                │
+│  2. app.listen() ← DELAYED                                    │
+│  3. Electron wrapper timeout ← ECONNREFUSED                   │
+└─────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│  NEW SEQUENCE (SUCCESSFUL)                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  1. app.listen() ← IMMEDIATE                                  │
+│  2. await db.init() ← BACKGROUND                              │
+│  3. Electron wrapper connects ← SUCCESS                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Architecture Principles
+## Architecture Principles
 
 ### 1. The Browser Analogy
-| Component | Browser Equivalent | ECE Implementation |
+| Component | Browser Equivalent | Anchor Implementation |
 |-----------|-------------------|-------------------|
 | Rendering Engine | Chromium/V8 | C++ N-API Modules |
 | Shell/Interface | Browser UI | Node.js Application |
@@ -65,7 +70,7 @@
 | Storage | IndexedDB/LocalStorage | PGlite (PostgreSQL-compatible) |
 
 ### 2. The "Write Once, Run Everywhere" Foundation
-ECE achieves cross-platform compatibility through:
+Anchor achieves cross-platform compatibility through:
 - **Node.js Orchestration**: Handles OS-specific operations and networking
 - **C++ N-API Modules**: Performance-critical operations compiled to native code
 - **Standard ABI**: N-API provides a stable interface between JavaScript and C++
@@ -77,66 +82,67 @@ The hybrid Node.js/C++ architecture implements the "Iron Lung" protocol:
 [User Input] -> [Node.js Layer] -> [N-API Boundary] -> [C++ Performance Layer] -> [Results]
 ```
 
-## API Architecture
+This allows rapid development in JavaScript while maintaining performance-critical operations in C++.
 
-### Core Endpoints
-*   `GET /health` - System readiness check (handles uninitialized state)
-*   `POST /v1/ingest` - Content ingestion pipeline
-*   `POST /v1/memory/search` - Semantic search functionality
-*   `POST /v1/memory/molecule-search` - Splits query into sentence-like chunks
-*   `GET /v1/buckets` - Get available data buckets
-*   `GET /v1/tags` - Get available tags
-*   `GET /monitoring/*` - System monitoring endpoints
+## System Components
 
-### Data Flow Architecture
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  INCOMING REQUEST                                              │
-├─────────────────────────────────────────────────────────────────┤
-│  HTTP Request → Middleware → Route Handler → Native Processing │
-│  → Database Query → Result Assembly → HTTP Response            │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Core Services
+- **Ingestion Service**: Content processing pipeline with native acceleration
+- **Search Service**: Tag-Walker protocol for graph-based associative retrieval
+- **Watchdog Service**: File system monitoring with debounced processing
+- **Dreamer Service**: Background processing for self-organization
+- **Backup Service**: Snapshot management for data persistence
 
-## Service Dependencies
+### Database Schema (PostgreSQL-compatible)
+- **Atoms Table**: Individual knowledge units with content, metadata, and relationships
+- **Tags Table**: Semantic tags and relationships between atoms
+- **Edges Table**: Connections between related atoms
+- **Sources Table**: Document origins and ingestion metadata
+- **Molecules/Compounds Tables**: Hierarchical content organization
 
-### Internal Services
-1. **Ingestion Service** - Content processing pipeline with native acceleration
-2. **Search Service** - Semantic retrieval engine with Tag-Walker protocol
-3. **Watchdog Service** - File system monitoring
-4. **Dreamer Service** - Background processing and self-organization
-5. **Agent Runtime** - Multi-stage reasoning loop for agent harnesses
+### API Endpoints
+- `GET /health` - System readiness check (handles uninitialized state)
+- `POST /v1/ingest` - Content ingestion with semantic processing
+- `POST /v1/memory/search` - Semantic search with token budgeting
+- `POST /v1/memory/molecule-search` - Splits query into sentence-like chunks
+- `GET /v1/buckets` - Get available data buckets
+- `GET /v1/tags` - Get available tags
+- `POST /v1/backup` - Create database backup
+- `GET /v1/backups` - List available backups
+- `POST /v1/backup/restore` - Restore from backup
 
-### External Dependencies
-1. **PGlite** - Database persistence (PostgreSQL-compatible)
-2. **Electron** - Desktop UI wrapper
-3. **Express** - HTTP server framework
-4. **node-llama-cpp** - Local LLM inference
-5. **wink-nlp** - Natural language processing
+## Performance Characteristics
 
-## Native Module Architecture
+### Native Module Benefits
+- **2.3x Performance Improvement**: Over pure JavaScript implementations
+- **Sub-millisecond Processing**: For typical operations
+- **Zero-Copy String Processing**: Using `std::string_view` to reduce memory pressure
+- **Batch Processing**: SIMD-optimized operations for distance calculations
 
-### Performance-Critical Operations
-1. **Atomizer** - Content splitting with prose/code strategies
-2. **Key Assassin** - Content sanitization and JSON artifact removal
-3. **Fingerprint** - SimHash generation for deduplication
-4. **Distance** - Hamming distance calculation for similarity
+### Critical Path Operations
+1. **Atomization**: Splitting content into semantic molecules
+2. **Sanitization**: Removing JSON artifacts and log spam ("Key Assassin")
+3. **Fingerprinting**: Generating SimHash for deduplication
+4. **Distance Calculation**: Computing similarity between fingerprints
 
-### Integration Pattern
-- **N-API Boundary**: Stable interface between JavaScript and C++
-- **Graceful Degradation**: JavaScript fallbacks when native modules unavailable
-- **Zero-Copy Operations**: Using `std::string_view` where possible
-- **Batch Processing**: Optimized for high-throughput operations
+## Search Architecture
 
-## Data Model Architecture
+### Tag-Walker Protocol
+The core search mechanism replaces legacy vector search with graph-based associative retrieval:
+1. **Initial FTS**: Full-text search with GIN index
+2. **Pivot**: Identify key terms and semantic categories
+3. **Walk**: Traverse graph relationships to find related content
 
-### Atomic Hierarchy
-```
-Compound (File) -> Molecule (Semantic Chunk) -> Atom (Entity)
-```
+### Smart Search Protocol (Standard 094)
+- **Intelligent Parsing**: Remove stopwords and detect intent
+- **Fuzzy Fallback**: Automatically retry with broader logic if strict search fails
+- **Dynamic Sorting**: Use keywords like "earliest" or "oldest" to toggle chronological sorting
+- **Tag-Based Filtering**: Use hashtags for precise filtering
 
-Where:
-- **Compound**: The source file (e.g., `journal_entry.yaml`)
+## Data Model
+
+### Atomic Architecture: Compound → Molecule → Atom
+- **Compound**: The source document (e.g., `journal_entry.yaml`)
 - **Molecule**: The text chunk with semantic meaning (e.g., paragraph/sentence)
 - **Atom**: The atomic entity within molecules (e.g., "Alice", "Bob", "Albuquerque")
 
@@ -151,77 +157,61 @@ Instead of unlimited granular tags, the system uses constrained semantic categor
 - `#Temporal`: Time-based sequences and chronology
 - `#Causal`: Cause-effect relationships
 
-## Agent Harness Agnosticism
+## Agent Harness Integration
 
-### Core Philosophy: Data Atomization Service
-ECE/Anchor is fundamentally a **data atomization service** that:
+### Harness Agnosticism Goal
+Anchor is designed to be **agent harness agnostic**, meaning it can work with multiple agent frameworks and systems. While **OpenCLAW** is the primary harness we intend to use, the system is architected to support:
+
+- OpenCLAW (primary target)
+- Other custom agent frameworks
+- Third-party agent systems
+- Direct API integrations
+
+### Data Atomization Service
+Anchor's core function is as a **data atomization service** that:
 - Packages diverse data types into semantically meaningful units
 - Enables semantic utilization of multiple data types
-- Provides API access for querying and parsing data
-- Outputs data in standardized formats (JSON, CSV, tables)
+- Provides CLI access for querying and parsing data
+- Outputs data in standardized formats (tables, CSV, JSON)
 - Serves as a foundational layer for various agent systems
 
-### Integration Pattern
-1. Agent harness sends query to ECE
-2. Query is intercepted and processed by the search system
-3. Retrieved context (limited to configurable tokens) is returned
-4. Agent harness combines context with its own logic
-5. Final processing happens in the agent system
+The system can be queried through the Anchor CLI to parse data into structured formats that can be consumed by any agent harness.
 
-**Data Flow:**
-```
-Agent Query -> Anchor Context Retrieval -> Context + Agent Logic -> Response
-```
+## Error Handling & Resilience
 
-## Error Handling Architecture
+### Graceful Degradation
+- **Native Module Fallback**: JavaScript implementations when native modules unavailable
+- **Database Connectivity**: Health checks handle uninitialized state gracefully
+- **Connection Stability**: Fixed ECONNREFUSED errors with proper startup sequence
+- **Resource Management**: Memory optimization and automatic garbage collection
 
 ### Startup Error Prevention (Standard 088)
 - Server binds to port before database initialization
-- Health checks handle uninitialized state gracefully
+- Health endpoints handle uninitialized state gracefully
 - Extended timeouts for initialization sequences
 - Fallback mechanisms for database connectivity
 
-### Runtime Error Handling
-- Circuit breaker patterns for service dependencies
-- Graceful degradation when components fail
-- Comprehensive logging for diagnostic purposes
-- Native module fallback to JavaScript implementations
+## Security & Privacy
 
-## Performance Considerations
-
-### Native Module Performance
-- **Distance Calculations**: 4.7M ops/sec (Batch/SIMD) - 8,000x improvement
-- **Ingestion Pipeline**: Full pipeline (Cleanse → Fingerprint) at ~9ms
-- **Memory Efficiency**: 30-50% reduction in memory usage
-- **Cross-Platform**: Consistent performance across Windows, macOS, Linux
-
-### Runtime Performance
-- Connection pooling for database operations
-- Caching strategies for frequent queries
-- Background processing for heavy operations
-- Memory management for long-running processes
-
-## Security Architecture
+### Local-First Architecture
+- All data remains under user control, no cloud dependencies
+- Encryption for sensitive data storage
+- Secure configuration management
+- Process isolation between components
 
 ### Access Control
 - Localhost-only binding for sensitive endpoints
 - Input validation for all API routes
-- Secure configuration management
-- Process isolation between components
-
-### Data Protection
-- Encrypted storage for sensitive data
 - Secure transmission protocols
 - Access logging for audit trails
-- Input sanitization for all data ingestion
 
-## Monitoring & Observability
+## Monitoring & Observables
 
-### Health Monitoring
-- Real-time system status checks
-- Component-specific health endpoints
-- Performance metric collection
-- Resource utilization tracking
+### Health Checks
+- System status: `GET /health`
+- Component status: `GET /health/{component}`
+- Performance metrics: `GET /monitoring/metrics`
+- Resource utilization: Continuous monitoring with configurable intervals
 
 ### Diagnostic Capabilities
 - Structured logging with context
@@ -245,17 +235,24 @@ Agent Query -> Anchor Context Retrieval -> Context + Agent Logic -> Response
 
 ## Deployment Architecture
 
-### Process Management
-- Single executable deployment
-- Automatic restart on failure
-- Graceful shutdown procedures
-- Resource cleanup on termination
+### Technology Stack
+- **Backend**: Node.js with Express.js
+- **Database**: PGlite (PostgreSQL-compatible)
+- **Frontend**: TypeScript, React (Vite build system)
+- **Desktop**: Electron wrapper
+- **AI Integration**: Local LLM support with remote fallback
 
-### Platform Support
-- Cross-platform compatibility
-- Native module handling
-- File system abstraction
-- OS-specific optimizations
+### Cross-Platform Support
+- Windows 10+ / macOS 10.15+ / Linux Ubuntu 20.04+
+- Consistent performance across platforms
+- Platform-specific binary compilation
+- Universal installation scripts
+
+## Standards Implemented
+- **Standard 053**: PGlite Pain Points & OS Compatibility
+- **Standard 059**: Reliable Ingestion Pipeline
+- **Standard 088**: Server Startup Sequence (ECONNREFUSED fix)
+- **Standard 094**: Smart Search Protocol (Fuzzy Fallback & GIN Optimization)
 
 ## Change Management
 

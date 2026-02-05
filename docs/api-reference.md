@@ -1,8 +1,8 @@
-# ECE_Core API Reference
+# Anchor API Reference
 
 ## Overview
 
-The ECE_Core system provides a comprehensive API for interacting with the context engine. All endpoints follow the UniversalRAG standard and are accessible under the `/v1/` prefix.
+The Anchor system provides a comprehensive API for interacting with the context engine. All endpoints follow the UniversalRAG standard and are accessible under the `/v1/` prefix.
 
 ## Authentication
 

@@ -1,5 +1,5 @@
 {
-  "name": "@ece/core",
+  "name": "@anchor/core",
   "version": "1.0.0",
   "description": "Anchor - Personal External Memory System with Semantic Shift Architecture",
   "main": "index.js",
@@ -49,10 +49,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/External-Context-Engine/ECE_Core.git"
+    "url": "https://github.com/RSBalchII/Anchor.git"
   },
   "bugs": {
-    "url": "https://github.com/External-Context-Engine/ECE_Core/issues"
+    "url": "https://github.com/RSBalchII/Anchor/issues"
   },
-  "homepage": "https://github.com/External-Context-Engine/ECE_Core#readme"
+  "homepage": "https://github.com/RSBalchII/Anchor#readme"
 }

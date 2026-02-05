@@ -12,7 +12,7 @@
 ```bash
 # Clone and setup
 git clone <repository-url>
-cd ECE_Core
+cd Anchor
 pnpm install
 pnpm build
 

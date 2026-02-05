@@ -1,11 +1,11 @@
-# ECE_Native Optimized Modules Installation Guide
+# Anchor_Native Optimized Modules Installation Guide
 
 This guide explains how to install and use the optimized native modules with SIMD and RE2 support.
 
 ## Prerequisites
 
 ### System Requirements
-- Node.js 18+ 
+- Node.js 18+
 - Python 3.x (for node-gyp)
 - Build tools:
   - **Windows**: Visual Studio Build Tools 2019+ with C++ support

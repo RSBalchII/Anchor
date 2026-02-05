@@ -1,10 +1,10 @@
 @echo off
 :: Ensuring GC is exposed for the engine process
 
-TITLE ECE Core - Sovereign Context Engine - Launcher
+TITLE Anchor - Sovereign Context Engine - Launcher
 
 echo ========================================================
-echo   Sovereign Context Engine (ECE) - Electron Launcher
+echo   Sovereign Context Engine (Anchor) - Electron Launcher
 echo ========================================================
 echo.
 
@@ -45,7 +45,7 @@ if not exist "desktop-overlay\node_modules" (
 )
 
 :: 5. Native Module Build (C++ KeyAssassin)
-if not exist "engine\build\Release\ece_native.node" (
+if not exist "engine\build\Release\anchor_native.node" (
     echo [INFO] Building Native Module - First Time Setup...
     cd engine
     call npx node-gyp rebuild
@@ -72,7 +72,7 @@ echo [OK] Build successful.
 
 :: 6. Launch Electron
 echo.
-echo [INFO] Launching ECE Desktop Environment...
+echo [INFO] Launching Anchor Desktop Environment...
 echo [INFO] The Dashboard will open automatically when the Engine is ready.
 
 :: Standard 078: Kill any existing engine on port 3000 to ensure logs are visible in THIS terminal

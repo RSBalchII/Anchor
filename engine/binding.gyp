@@ -1,7 +1,7 @@
 {
   "targets": [
     {
-      "target_name": "ece_native",
+      "target_name": "anchor_native",
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "sources": [

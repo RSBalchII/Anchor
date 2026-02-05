@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "========================================================"
-echo "  Sovereign Context Engine (ECE) - Electron Launcher"
+echo "  Sovereign Context Engine (Anchor) - Electron Launcher"
 echo "========================================================"
 echo ""
 
@@ -37,7 +37,7 @@ if [ ! -d "desktop-overlay/node_modules" ]; then
 fi
 
 # 4. Native Module Build (C++ KeyAssassin)
-if [ ! -f "engine/build/Release/ece_native.node" ]; then
+if [ ! -f "engine/build/Release/anchor_native.node" ]; then
     echo "[INFO] Building Native Module (First Time)..."
     cd engine
     npx node-gyp rebuild
@@ -65,7 +65,7 @@ cd ..
 
 # 5. Launch Electron
 echo ""
-echo -e "${BLUE}[INFO] Launching ECE Desktop Environment...${NC}"
+echo -e "${BLUE}[INFO] Launching Anchor Desktop Environment...${NC}"
 echo -e "${BLUE}[INFO] The Dashboard will open automatically when the Engine is ready.${NC}"
 
 # Standard 078: Kill existing engine on port 3000

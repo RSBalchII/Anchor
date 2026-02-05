@@ -1,16 +1,16 @@
-# ECE Architecture Documentation: The Browser Paradigm
+# Anchor Architecture Documentation: The Browser Paradigm
 
 ## Overview
 
-The External Context Engine (ECE) implements what we call the "Browser Paradigm" for AI memory systems. Just as web browsers allow any machine to render the internet by downloading only the content needed for the current view, ECE allows any machine to process massive AI context by retrieving only the "atoms" required for the current thought.
+The Anchor Context Engine (Anchor) implements what we call the "Browser Paradigm" for AI memory systems. Just as web browsers allow any machine to render the internet by downloading only the content needed for the current view, Anchor allows any machine to process massive AI context by retrieving only the "atoms" required for the current thought.
 
-ECE is fundamentally a **data atomization service** that packages data in ways that allow multiple data types to be semantically utilized. The system can be queried and parsed through the Anchor CLI into tables, CSV, or JSON structures for use by various agent harnesses.
+Anchor is fundamentally a **data atomization service** that packages data in ways that allow multiple data types to be semantically utilized. The system can be queried and parsed through the Anchor CLI into tables, CSV, or JSON structures for use by various agent harnesses.
 
 ## Core Architecture Principles
 
 ### 1. The Browser Analogy
 
-| Component | Browser Equivalent | ECE Implementation |
+| Component | Browser Equivalent | Anchor Implementation |
 |-----------|-------------------|-------------------|
 | Rendering Engine | Chromium/V8 | C++ N-API Modules |
 | Shell/Interface | Browser UI | Node.js Application |
@@ -19,7 +19,7 @@ ECE is fundamentally a **data atomization service** that packages data in ways t
 
 ### 2. The "Write Once, Run Everywhere" Foundation
 
-ECE achieves cross-platform compatibility through:
+Anchor achieves cross-platform compatibility through:
 
 - **Node.js Orchestration**: Handles OS-specific operations and networking
 - **C++ N-API Modules**: Performance-critical operations compiled to native code
@@ -189,7 +189,7 @@ graph TD
 
 ## Performance Achievements
 
-The ECE_Core system has successfully achieved **orbital velocity** with the deployment of the **Hybrid C++/Node.js Architecture**. The "Iron Lung" (Native Module Acceleration) is operational with exceptional performance metrics:
+The Anchor system has successfully achieved **orbital velocity** with the deployment of the **Hybrid C++/Node.js Architecture**. The "Iron Lung" (Native Module Acceleration) is operational with exceptional performance metrics:
 
 - **Distance Calculations**: 4.7M ops/sec (Batch/SIMD) - 8,000x improvement
 - **Ingestion Pipeline**: Full pipeline (Cleanse → Fingerprint) at ~9ms
@@ -208,7 +208,7 @@ The ECE_Core system has successfully achieved **orbital velocity** with the depl
 
 ### Core Philosophy: Data Atomization Service
 
-ECE/Anchor is fundamentally a **data atomization service** that:
+Anchor is fundamentally a **data atomization service** that:
 
 - Packages diverse data types into semantically meaningful units
 - Enables semantic utilization of multiple data types
@@ -235,7 +235,7 @@ The system is designed to work with multiple agent harnesses:
 
 The system implements a "stateless" approach where:
 
-1. Agent harness sends query to ECE
+1. Agent harness sends query to Anchor
 2. Query is intercepted and processed by the search system
 3. Retrieved context (limited to configurable tokens) is returned
 4. Agent harness combines context with its own logic
@@ -267,9 +267,9 @@ The Tag-Walker protocol is the core search mechanism:
 
 The system exhibits some brittleness in natural language query processing:
 
-- **Issue**: Query "What is the latest state of the ECE" returned 0 results
+- **Issue**: Query "What is the latest state of the Anchor" returned 0 results
 - **Cause**: Over-optimization in NLP parser or overly strict bucket filters
-- **Fallback Success**: "state ECE" query returned 42 relevant results
+- **Fallback Success**: "state Anchor" query returned 42 relevant results
 - **Diagnosis**: Semantic Shift Architecture (Standard 084) needs calibration for natural language intent mapping
 
 ### Search Improvement Strategy
@@ -357,9 +357,9 @@ export class PathManager {
   public getNativePath(filename: string): string {
     // Handle platform-specific binary names
     switch (this.platform) {
-      case 'win32': return path.join(this.basePath, 'build', 'Release', 'ece_native.node');
+      case 'win32': return path.join(this.basePath, 'build', 'Release', 'anchor_native.node');
       case 'darwin':
-      case 'linux': return path.join(this.basePath, 'build', 'Release', 'ece_native.node');
+      case 'linux': return path.join(this.basePath, 'build', 'Release', 'anchor_native.node');
       default: throw new Error(`Unsupported platform: ${this.platform}`);
     }
   }
@@ -400,10 +400,10 @@ The system now uses PGlite (PostgreSQL-compatible) instead of CozoDB for improve
 
 ## Conclusion
 
-The ECE architecture embodies the "Browser Paradigm" by decoupling the computational logic from the data storage, allowing the system to scale efficiently across different hardware configurations. The hybrid Node.js/C++ approach provides both the flexibility of JavaScript for rapid development and the performance of C++ for critical operations, all while maintaining cross-platform compatibility through the N-API boundary.
+The Anchor architecture embodies the "Browser Paradigm" by decoupling the computational logic from the data storage, allowing the system to scale efficiently across different hardware configurations. The hybrid Node.js/C++ approach provides both the flexibility of JavaScript for rapid development and the performance of C++ for critical operations, all while maintaining cross-platform compatibility through the N-API boundary.
 
 The updated architecture focuses on stability and maintainability by reverting complex UI features to simpler glass panel designs, while maintaining the sophisticated context management and semantic search capabilities that define the system.
 
 Most importantly, the system is designed as a **data atomization service** that is **agent harness agnostic**, allowing it to serve as a foundational layer for multiple agent systems including OpenCLAW and others.
 
-This architecture enables ECE to run on any device—from smartphones to servers—while maintaining the sophisticated AI memory capabilities that users expect from modern systems.
+This architecture enables Anchor to run on any device—from smartphones to servers—while maintaining the sophisticated AI memory capabilities that users expect from modern systems.

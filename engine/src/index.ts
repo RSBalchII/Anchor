@@ -56,7 +56,7 @@ app.get('/health', async (_req, res) => {
       res.status(200).json({
         status: "healthy",
         timestamp: new Date().toISOString(),
-        message: "Engine is running and database is responsive"
+        message: "Anchor Context Engine is running and database is responsive"
       });
     } else {
       res.status(503).json({
@@ -86,11 +86,11 @@ app.get('/health', async (_req, res) => {
 
 async function startServer() {
   try {
-    console.log("Initializing Sovereign Context Engine...");
+    console.log("Initializing Anchor Context Engine...");
 
     // Start the server immediately so health checks pass
     app.listen(PORT, () => {
-      console.log(`Sovereign Context Engine running on port ${PORT}`);
+      console.log(`Anchor Context Engine running on port ${PORT}`);
       console.log(`Health check available at http://localhost:${PORT}/health`);
     });
 
@@ -155,7 +155,7 @@ async function startServer() {
 
 
   } catch (error) {
-    console.error("Failed to start:", error);
+    console.error("Failed to start Anchor Context Engine:", error);
     process.exit(1);
   }
 }
