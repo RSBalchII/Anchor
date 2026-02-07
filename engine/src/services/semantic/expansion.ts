@@ -5,7 +5,7 @@
  * 1. Synonym Ring - WordNet-lite mappings
  * 2. Phonetic Hash - Metaphone for typo tolerance (future)
  * 
- * Standard 095: Deterministic Semantic Expansion Protocol
+ * Deterministic Semantic Expansion Protocol (see project standards documentation)
  */
 
 import { readFileSync, existsSync } from 'fs';
