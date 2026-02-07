@@ -19,11 +19,15 @@ export class AtomicIngestService {
 
         if (uniqueAtoms.length > 0) {
             const atomRows = uniqueAtoms.map(a => [
-                a.id,
-                a.label,
-                a.type,
-                a.weight,
-                this.zeroVector()
+                a.id,                          // [0] id
+                a.label,                       // [1] content (label becomes content)
+                'atom_source',                 // [2] source_path
+                Date.now(),                    // [3] timestamp
+                "0",                           // [4] simhash (string!)
+                this.zeroVector(),             // [5] embedding (array)
+                'internal',                    // [6] provenance
+                ['atoms'],                     // [7] buckets
+                [a.label]                      // [8] tags
             ]);
 
             await this.batchWriteAtoms(atomRows);
@@ -121,7 +125,7 @@ export class AtomicIngestService {
                 m.id,
                 m.content,
                 compound.path, // source_path
-                m.timestamp, // Use molecule's context-aware timestamp
+                m.timestamp || compound.timestamp, // Use molecule's context-aware timestamp, fallback to compound timestamp
                 m.molecular_signature || this.generateHash(m.content), // simhash
                 this.zeroVector(), // embedding
                 compound.provenance,
@@ -161,13 +165,13 @@ export class AtomicIngestService {
                     [
                         row[0], // id
                         row[1], // label becomes content
-                        'atom_source', // source_path
-                        Date.now(), // timestamp
-                        "0", // simhash
-                        row[4], // embedding
-                        'internal', // provenance
-                        ['atoms'], // buckets
-                        [row[1]] // tags
+                        row[2] || 'atom_source', // source_path (from row, fallback to 'atom_source')
+                        row[3] || Date.now(), // timestamp (from row, fallback to current time)
+                        row[4] || "0", // simhash (from row, fallback to "0")
+                        typeof row[5] !== 'undefined' ? JSON.stringify(row[5]) : JSON.stringify(this.zeroVector()), // embedding as JSON string
+                        row[6] || 'internal', // provenance (from row, fallback to 'internal')
+                        Array.isArray(row[7]) ? row[7] : ['atoms'], // buckets (from row, fallback to ['atoms'])
+                        Array.isArray(row[8]) ? row[8] : [row[1]] // tags (from row, fallback to [label])
                     ]
                 );
             }
@@ -196,7 +200,20 @@ export class AtomicIngestService {
                        molecular_signature = EXCLUDED.molecular_signature,
                        embedding = EXCLUDED.embedding,
                        timestamp = EXCLUDED.timestamp`,
-                    row
+                    [
+                        row[0] || '', // id
+                        row[1] || '', // content
+                        row[2] || '', // compound_id
+                        row[3] || 0, // sequence
+                        row[4] || 0, // start_byte
+                        row[5] || 0, // end_byte
+                        row[6] || 'prose', // type
+                        row[7] !== undefined ? row[7] : null, // numeric_value
+                        row[8] || null, // numeric_unit
+                        row[9] || '0', // molecular_signature
+                        typeof row[10] !== 'undefined' ? JSON.stringify(row[10]) : JSON.stringify(this.zeroVector()), // embedding as JSON string
+                        row[11] || Date.now() // timestamp
+                    ]
                 );
             }
         }
@@ -240,7 +257,17 @@ export class AtomicIngestService {
                        atoms = EXCLUDED.atoms,
                        molecules = EXCLUDED.molecules,
                        embedding = EXCLUDED.embedding`,
-                    row
+                    [
+                        row[0] || '',                                                      // id
+                        row[1] || '',                                                      // compound_body
+                        row[2] || '',                                                      // path
+                        row[3] || Date.now(),                                              // timestamp
+                        row[4] || 'internal',                                              // provenance
+                        row[5] || '0',                                                     // molecular_signature
+                        Array.isArray(row[6]) ? JSON.stringify(row[6]) : (row[6] || '[]'), // atoms (JSON string!)
+                        Array.isArray(row[7]) ? JSON.stringify(row[7]) : (row[7] || '[]'), // molecules (JSON string!)
+                        Array.isArray(row[8]) ? JSON.stringify(row[8]) : (row[8] || '[]')  // embedding (JSON string!)
+                    ]
                 );
             }
         }
@@ -268,7 +295,20 @@ export class AtomicIngestService {
                        compound_id = EXCLUDED.compound_id,
                        start_byte = EXCLUDED.start_byte,
                        end_byte = EXCLUDED.end_byte`,
-                    row
+                    [
+                        row[0] || '', // id
+                        row[1] || '', // content
+                        row[2] || '', // source_path
+                        row[3] || Date.now(), // timestamp
+                        row[4] || "0", // simhash
+                        typeof row[5] !== 'undefined' ? JSON.stringify(row[5]) : JSON.stringify(this.zeroVector()), // embedding as JSON string (TEXT column)
+                        row[6] || 'internal', // provenance
+                        Array.isArray(row[7]) ? row[7] : ['core'], // buckets - raw array for TEXT[] column
+                        Array.isArray(row[8]) ? row[8] : [], // tags - raw array for TEXT[] column
+                        row[9] || null, // compound_id
+                        row[10] || 0, // start_byte
+                        row[11] || 0 // end_byte
+                    ]
                 );
             }
         }

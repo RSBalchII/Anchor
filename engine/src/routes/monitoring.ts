@@ -11,7 +11,7 @@ import * as os from 'os';
 import * as fs from 'fs/promises';
 import { db } from '../core/db.js';
 
-export const monitoringRouter = Router();
+export const monitoringRouter: Router = Router();
 
 // Health check endpoint
 monitoringRouter.get('/health', async (_req: Request, res: Response) => {

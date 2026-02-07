@@ -1,6 +1,5 @@
-
 import { useState, useEffect, useCallback } from 'react';
-import './index.css';
+import './App.css';
 import PerformanceMonitor from './components/PerformanceMonitor';
 import { api } from './services/api';
 import { GlassPanel } from './components/ui/GlassPanel';
@@ -46,10 +45,6 @@ const Dashboard = () => (
 // --- SEARCH PAGE CONTAINER ---
 const SearchPage = () => {
   const [columns, setColumns] = useState<{ id: number; query?: string }[]>([{ id: 1 }]);
-  // Context/FullText states tracked for Copy functionality,
-  // but individual columns manage their own data now.
-  const [columnContexts, setColumnContexts] = useState<Record<number, string>>({});
-  const [columnFullTexts, setColumnFullTexts] = useState<Record<number, string>>({});
 
   // Global State
   const [backupStatus, setBackupStatus] = useState('');
@@ -78,47 +73,15 @@ const SearchPage = () => {
   const removeColumn = useCallback((id: number) => {
     console.log('[SearchPage] removeColumn called for ID:', id);
     setColumns(prev => prev.filter(c => c.id !== id));
-    setColumnContexts(prev => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    setColumnFullTexts(prev => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
   }, []);
 
-  const handleContextUpdate = useCallback((id: number, ctx: string) => {
-    setColumnContexts(prev => ({ ...prev, [id]: ctx }));
+  const handleContextUpdate = useCallback((_id: number, _ctx: string) => {
+    // Handle context updates if needed
   }, []);
 
-  const handleFullUpdate = useCallback((id: number, full: string) => {
-    setColumnFullTexts(prev => ({ ...prev, [id]: full }));
+  const handleFullUpdate = useCallback((_id: number, _full: string) => {
+    // Handle full text updates if needed
   }, []);
-
-  const copyContextWindow = async () => {
-    const all = Object.values(columnContexts).filter(c => c && c.trim()).join('\n\n' + '='.repeat(40) + '\n\n');
-    if (!all) return alert("No context to copy.");
-    try {
-      await navigator.clipboard.writeText(all);
-      alert("Context Window (Limited) Copied!");
-    } catch (e) {
-      alert("Failed to copy. Ensure window is focused.");
-    }
-  };
-
-  const copyFullResults = async () => {
-    const all = Object.values(columnFullTexts).filter(c => c && c.trim()).join('\n\n' + '='.repeat(40) + '\n\n');
-    if (!all) return alert("No results to copy.");
-    try {
-      await navigator.clipboard.writeText(all);
-      alert("ALL Results (Unlimited) Copied!");
-    } catch (e) {
-      alert("Failed to copy. Ensure window is focused.");
-    }
-  };
 
   const handleBackup = async () => {
     setBackupStatus('Saving...');
@@ -130,7 +93,7 @@ const SearchPage = () => {
   };
 
   return (
-    <GlassPanel className="search-page-container" style={{ margin: '1rem', padding: '1rem', height: 'calc(100% - 2rem)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <GlassPanel className="search-page-container" style={{ margin: '1rem', padding: '0.5rem 0.5rem 0.5rem 0.5rem', height: 'calc(100% - 2rem)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
 
       {/* GLOBAL HEADER */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -161,12 +124,8 @@ const SearchPage = () => {
 
           <div style={{ width: '1px', height: '20px', background: 'var(--border-subtle)', margin: '0 0.5rem' }} />
 
-          <Button onClick={copyContextWindow} style={{ fontSize: '0.8rem', padding: '0.4rem', border: '1px solid var(--accent-primary)' }}>
-            📄 Copy Limit ({columns.length})
-          </Button>
-          <Button onClick={copyFullResults} style={{ fontSize: '0.8rem', padding: '0.4rem', border: '1px solid var(--accent-primary)' }}>
-            📚 Copy All (∞)
-          </Button>
+          {/* Removed redundant copy buttons: Copy Limit and Copy All */}
+
           <Button onClick={() => addColumn()} disabled={columns.length >= 8} style={{ fontSize: '1rem', padding: '0.2rem 0.8rem', background: 'var(--accent-primary)', color: 'white' }}>
             +
           </Button>

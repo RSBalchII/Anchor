@@ -41,7 +41,7 @@ function startEngine() {
   } catch (e) { log(`[DEBUG] Error checking file: ${e}`); }
 
   // Spawn Node process
-  engineProcess = spawn("node", ["--expose-gc", engineScript], {
+  engineProcess = spawn("node", ["--expose-gc", "--max-old-space-size=8192", engineScript], {
     cwd: rootDir,
     stdio: ["ignore", "inherit", "inherit"],
     env: { ...process.env, FORCE_COLOR: "1" },

@@ -63,6 +63,14 @@ The search now follows the Tag-Walker protocol with 70/30 split:
 - **70% Anchors**: Direct keyword matches via FTS
 - **30% Walkers**: Associative neighbors via graph traversal
 
+### 4. Enhanced Chronological Sorting (Standard 096)
+The system now implements context-aware timestamp assignment following Standard 096:
+
+- **Content-specific timestamps**: Extract temporal markers from content (ISO dates, US dates, Month-Day formats)
+- **File modification inheritance**: Use source file modification time as fallback
+- **Temporal diversity**: Show varied timestamps reflecting actual content timeline
+- **Chronological queries**: Proper handling of temporal range queries like "from 2025 to 2026"
+
 ### 4. Provenance-Aware Queries
 The system applies different weights based on content provenance:
 

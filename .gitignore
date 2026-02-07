@@ -2,6 +2,7 @@
 .env
 .env.*
 *.env
+prompts/
 
 # Database & Storage
 context.db/
@@ -37,3 +38,6 @@ Thumbs.db
 # Temporary/User Specific
 codebase
 codebase/*
+
+# Generated documentation
+QWEN.md

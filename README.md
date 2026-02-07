@@ -175,6 +175,7 @@ pnpm build
 - **ECONNREFUSED**: Fixed in Standard 088 - server starts before database initialization
 - **Slow Startup**: First run includes database initialization (subsequent runs are faster)
 - **UI Access**: Direct access at http://localhost:3000 if Electron wrapper is delayed
+- **Database Type Errors**: Fixed "Invalid input for string type" errors during ingestion pipeline - see Standard 059 for details
 
 ### Health Checks
 - System status: `GET /health`

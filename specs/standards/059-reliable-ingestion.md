@@ -23,12 +23,21 @@
 ## 5. Metadata Mandatory
 *   **Source ID:** `source_id` is mandatory for all atoms.
 *   **Sequence:** `sequence` is mandatory (default 0).
+*   **Timestamp:** `timestamp` is now context-aware following Standard 096, with priority: content-specific temporal markers > file modification time > ingestion time.
+
 ## 6. The Cleanup Protocol (Encoding & Sanitization)
 *   **Null Byte Stripping:** Ingested content MUST be scrubbed of null bytes (`\x00`) and replacement characters (`\uFFFD`). These cause `node-llama-cpp` tokenizer to bloat text significantly (1 char -> multiple tokens), leading to context overflows.
 *   **BOM Detection:** The system MUST detect UTF-16 LE/BE Byte Order Marks (BOM) and decode buffers accordingly before processing.
 *   **Strict Truncation:** To preserve system stability, embedding workers MUST truncate inputs to a safe factor of the context window (Recommended: `1.2 * ContextSize` characters) to prevent OOM or logic crashes on dense inputs (e.g., minified code).
 
-## 7. The Inbox Zero Protocol (Recursive Ingestion)
+## 7. Enhanced Timestamp Assignment (Standard 096)
+*   **Content Extraction:** Scan content for temporal markers (ISO dates, US dates, Month-Day formats) with regex patterns.
+*   **File Inheritance:** Use source file modification time as default when no content-specific temporal data exists.
+*   **Context Propagation:** Pass timestamps through atomic topology (Compound -> Molecule -> Atom).
+*   **Fallback Chain:** Maintain ingestion time as ultimate fallback when neither content nor file timestamps are available.
+*   **Temporal Diversity:** Enable chronological sorting that reflects actual content timeline rather than ingestion time.
+
+## 8. The Inbox Zero Protocol (Recursive Ingestion)
 *   **Recursive Scanning:** The Ingestion Engine MUST scan subdirectories within the `inbox/` folder.
 *   **Smart Bucketing:**
     *   Files at `inbox/root.md` -> Bucket: `inbox`.
@@ -44,3 +53,11 @@
     *   **Disable on Danger**: Native modules (C++) MUST be disabled or wrapped in strict try-catch blocks when processing complex nested structures (YAML/JSON) to prevent stack overflows.
     *   **JS Fallback**: A high-performance pure JavaScript fallback MUST be available for all native operations (Sanitization, Atomization, Fingerprinting).
 *   **Database Truncation**: Search indexes (`tsvector`) have hard limits (1MB). Content written to the `atoms` search table MUST be truncated (e.g., 500KB), while the full content is preserved in the `compounds` table.
+
+## 9. Database Type Safety Protocol (String Type Validation)
+**Context**: During atomic ingestion, database operations were failing with "Invalid input for string type" errors due to mismatched data types being passed to PGlite queries.
+*   **Type Validation**: All database insertion operations MUST validate data types before insertion, especially when using batch operations.
+*   **Safe Conversion**: Complex data types (arrays, objects) MUST be converted to appropriate database formats (e.g., JSON strings for PGlite compatibility) before insertion.
+*   **Fallback Values**: Operations MUST provide appropriate fallback/default values for missing or invalid data to prevent type errors.
+*   **Embedding Serialization**: Embedding vectors MUST be serialized as JSON strings when stored in text/JSON columns to ensure PGlite compatibility.
+*   **Array Handling**: Array-type columns (buckets, tags) MUST be properly serialized as JSON strings when required by the database schema.

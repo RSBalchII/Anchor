@@ -123,6 +123,30 @@ metadata:
 *   **Content:** Atomization, sanitization, fingerprinting, deduplication processes.
 *   **LLM Focus:** Data transformation and quality assurance protocols.
 
+### 6. Database Reset Protocol (`specs/standards/095-database-reset-on-startup.md`)
+*   **Role:** Database initialization and clean state management for LLM developers.
+*   **Format:** Proactive cleanup protocols and initialization procedures.
+*   **Content:** Directory cleanup, fresh initialization, data re-ingestion patterns.
+*   **LLM Focus:** Database resilience and clean state management for dataset swapping.
+
+### 7. Timestamp Assignment Protocol (`specs/standards/096-timestamp-assignment-protocol.md`)
+*   **Role:** Temporal context propagation and timestamp assignment for LLM developers.
+*   **Format:** Content-specific timestamp extraction and file modification inheritance.
+*   **Content:** Temporal pattern recognition, context-aware timestamp propagation, fallback mechanisms.
+*   **LLM Focus:** Chronological accuracy and temporal diversity in search results.
+
+### 8. Enhanced Code Analysis (`specs/standards/097-enhanced-code-analysis.md`)
+*   **Role:** AST-based code analysis and intelligence features for LLM developers.
+*   **Format:** Language-specific parsing with semantic integration.
+*   **Content:** AST integration, symbol resolution, type analysis, privacy-preserving code intelligence.
+*   **LLM Focus:** Deep code understanding while maintaining privacy and context awareness.
+
+### 9. Horizontal Scaling Architecture (`specs/standards/098-scaling-architecture.md`)
+*   **Role:** Distributed processing and horizontal scaling for LLM developers.
+*   **Format:** Microservices architecture with data partitioning.
+*   **Content:** Service decomposition, data sharding, distributed search, privacy-preserving scaling.
+*   **LLM Focus:** Scalable architecture while maintaining sovereignty and performance.
+
 ## LLM Developer Reference Patterns
 
 ### Performance Optimization Patterns

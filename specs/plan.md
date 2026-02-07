@@ -102,6 +102,7 @@
 - [ ] **Performance Monitoring**: Track multi-harness performance metrics.
 
 ## Phase 20: Advanced RAG & Context Management (Up Next)
+- [x] **Deterministic Semantic Expansion**: Synonym ring for embedding-like matching without VRAM.
 - [ ] **Backup System**: Robust snapshotting/restore functionality.
 - [ ] **Smart Context**: Middle-Out "Rolling Slicer" logic for large contexts.
 - [ ] **Live Context Visualizer**: "RAG IDE" with real-time visualization.

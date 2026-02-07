@@ -7,6 +7,7 @@
 
 console.log("[DB] Loading Config...");
 import { config } from "../config/index.js";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { PGlite } from "@electric-sql/pglite";
@@ -37,12 +38,33 @@ export class Database {
       // Use pathManager for consistent absolute path (Standard 051)
       const dbPath = process.env.PGLITE_DB_PATH || pathManager.getDatabasePath();
 
+      // Wipe and recreate the database directory for clean state
+      try {
+        console.log(`[DB] Preparing database directory: ${dbPath}`);
+
+        // Close any existing database connection first
+        if (this.dbInstance) {
+          await this.dbInstance.close();
+          this.dbInstance = null;
+        }
+
+        // Remove the entire database directory if it exists
+        if (this.existsSync(dbPath)) {
+          console.log(`[DB] Removing existing database directory: ${dbPath}`);
+          this.rmdirSync(dbPath, { recursive: true, force: true });
+        }
+
+        console.log(`[DB] Database directory prepared: ${dbPath}`);
+      } catch (cleanupError: any) {
+        console.error(`[DB] Error during database directory preparation:`, cleanupError);
+        throw cleanupError;
+      }
+
       try {
         console.log(`[DB] Initializing PGlite at: ${dbPath}`);
-
         // Initialize PGlite without vector extension initially
+        // Let PGlite handle directory creation internally
         this.dbInstance = await new PGlite(dbPath);
-
         console.log(`[DB] PGlite initialized successfully: ${dbPath}`);
       } catch (e: any) {
         console.error(`[DB] Failed to initialize PGlite: ${e.message}`);
@@ -98,7 +120,7 @@ export class Database {
       throw e;
     }
 
-    // Create Tags table (The "Nervous System")
+    // Create the tags table (The "Nervous System")
     try {
       await this.run(`
         CREATE TABLE IF NOT EXISTS tags (
@@ -332,6 +354,11 @@ export class Database {
     );
     return result;
   }
+
+  // Helper methods for file system operations
+  private existsSync = fs.existsSync;
+  private rmdirSync = fs.rmSync;
+  private mkdirSync = fs.mkdirSync;
 }
 
 // Export a singleton instance

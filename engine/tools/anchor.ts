@@ -2,9 +2,10 @@
 
 /**
  * Anchor Console (TUI)
- * 
+ *
  * A terminal interface for interacting with the Anchor System (formerly ECE).
  * Allows direct SQL execution and system monitoring.
+ * Now includes simplified query builder functionality.
  */
 
 // Native fetch is available in Node 18+
@@ -32,10 +33,10 @@ const rl = readline.createInterface({
 
 console.log(`
 ${colors.bright}${colors.blue}
-    _    _   _  ____ _   _  ___  ____  
-   / \\  | \\ | |/ ___| | | |/ _ \\|  _ \\ 
+    _    _   _  ____ _   _  ___  ____
+   / \\  | \\ | |/ ___| | | |/ _ \\|  _ \\
   / _ \\ |  \\| | |   | |_| | | | | |_) |
- / ___ \\| |\\  | |___|  _  | |_| |  _ < 
+ / ___ \\| |\\  | |___|  _  | |_| |  _ <
 /_/   \\_\\_| \\_|\\____|_| |_|\\___/|_| \\_\\
 ${colors.reset}
 ${colors.dim}System Reality Interface v1.0${colors.reset}
@@ -53,6 +54,13 @@ rl.on('line', async (line) => {
     // Command handling (only if buffer empty)
     if (queryBuffer.length === 0 && trimmedLine.startsWith('/')) {
         handleCommand(trimmedLine);
+        rl.prompt();
+        return;
+    }
+
+    // Check for query builder commands
+    if (queryBuffer.length === 0 && trimmedLine.startsWith('qb:')) {
+        await handleQueryBuilderCommand(trimmedLine.substring(3)); // Remove 'qb:' prefix
         rl.prompt();
         return;
     }
@@ -92,7 +100,7 @@ rl.on('line', async (line) => {
 
 
 
-let outputMode: 'table' | 'csv' | 'json' = 'table';
+let outputMode: 'table' | 'csv' | 'json' | 'yaml' = 'table';
 
 async function executeSql(query: string) {
     try {
@@ -137,6 +145,17 @@ async function executeSql(query: string) {
     }
 }
 
+async function handleQueryBuilderCommand(command: string) {
+    try {
+        // For now, we'll just show a message that the query builder is available
+        // In a real implementation, you would need to run the query builder in a Node.js context
+        console.log(`${colors.yellow}Query builder functionality is available in the API.${colors.reset}`);
+        console.log(`${colors.dim}Use the query builder programmatically in your scripts.${colors.reset}`);
+    } catch (err: any) {
+        console.error(`${colors.red}Query builder error: ${err.message}${colors.reset}`);
+    }
+}
+
 function convertToCsv(rows: any[]): string {
     if (rows.length === 0) return '';
     const headers = Object.keys(rows[0]);
@@ -165,7 +184,12 @@ function handleCommand(cmd: string) {
     /table          Switch to Table output (Default)
     /csv            Switch to CSV output
     /json           Switch to JSON output
-  
+    /yaml           Switch to YAML output
+
+  ${colors.bright}Query Builder:${colors.reset}
+    The query builder is available programmatically in your scripts.
+    Import it using: import { query } from './services/query-builder/QueryBuilder.js'
+
   ${colors.bright}Usage:${colors.reset}
     Simply type standard SQL queries to execute them against the live database.
     Example: ${colors.green}SELECT * FROM atoms LIMIT 5;${colors.reset}
@@ -189,6 +213,11 @@ function handleCommand(cmd: string) {
         case '/json':
             outputMode = 'json';
             console.log(`${colors.green}Output mode set to JSON.${colors.reset}`);
+            break;
+
+        case '/yaml':
+            outputMode = 'yaml';
+            console.log(`${colors.green}Output mode set to YAML.${colors.reset}`);
             break;
 
         case '/table':

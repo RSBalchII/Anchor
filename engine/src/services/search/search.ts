@@ -17,12 +17,16 @@ import { composeRollingContext } from '../../core/inference/context_manager.js';
 import { config } from '../../config/index.js';
 import { SemanticCategory } from '../../types/taxonomy.js';
 import { executeSemanticSearch } from '../semantic/semantic-search.js';  // Import semantic search
+import { expandTerms as semanticExpand, loadSynonymRing, isExpansionReady } from '../semantic/expansion.js'; // DSE expansion
 import wink from 'wink-nlp';
 import model from 'wink-eng-lite-web-model';
 import { ContextInflator } from './context-inflator.js';
 
 // Initialize NLP (Fast CPU-based)
 const nlp = wink(model);
+
+// Initialize Semantic Expansion (Synonym Ring)
+loadSynonymRing();
 
 export interface SearchResult {
   id: string;
@@ -36,6 +40,7 @@ export interface SearchResult {
   score: number;
   sequence?: number; // Added for Bright Node continuity
   molecular_signature?: string;  // V4 Nomenclature (formerly simhash)
+  frequency?: number; // Number of times this content was found (for deduplication)
   // Atomic Fields
   compound_id?: string;
   start_byte?: number;
@@ -126,7 +131,7 @@ function sanitizeFtsQuery(query: string): string {
  */
 /**
  * Helper: Extract Temporal Context
- * Detects "last X months/years" and returns a list of relevant year tags.
+ * Detects "last X months/years", year ranges, and returns a list of relevant year tags.
  */
 function extractTemporalContext(query: string): string[] {
   const now = new Date();
@@ -156,8 +161,19 @@ function extractTemporalContext(query: string): string[] {
     }
   }
 
+  // Detect year ranges like "from 2025 to 2026" or "between 2024 and 2025"
+  const rangeMatch = query.match(/\b(from|between)\s+(\d{4})\s+(to|and)\s+(\d{4})\b/i);
+  if (rangeMatch) {
+    const startYear = parseInt(rangeMatch[2]);
+    const endYear = parseInt(rangeMatch[4]);
+    // Add all years in the range
+    for (let year = Math.min(startYear, endYear); year <= Math.max(startYear, endYear); year++) {
+      tags.add(year.toString());
+    }
+  }
+
   // Also detect explicit years (2020-2030)
-  const yearMatch = query.match(/\b(202[0-9])\b/g);
+  const yearMatch = query.match(/\b(202[0-9]|203[0-9])\b/g);
   if (yearMatch) {
     yearMatch.forEach(y => tags.add(y));
   }
@@ -180,7 +196,7 @@ function parseNaturalLanguage(query: string): string {
   // We want to keep words like "burnout" (Noun), "started" (Verb), "career" (Noun)
   // By default, just keeping NOUN/PROPN/ADJ is usually safe, but let's be slightly more permissive
   // or rely on the query expansion to catch synonyms.
-  // Actually, "burnout" is a Noun. "Career" is a Noun. 
+  // Actually, "burnout" is a Noun. "Career" is a Noun.
   // "Decisions" is a Noun.
   // The issue might have been valid stopwords or tokenization.
 
@@ -295,10 +311,15 @@ export async function tagWalkerSearch(
       `%${sanitizedQuery}%` // $2 for ILIKE matching
     ];
 
-    if (provenance !== 'all') {
+    if (provenance !== 'all' && provenance !== 'quarantine') {
       const provParamIdx = anchorParams.length + 1;
       anchorQuery += ` AND a.provenance = $${provParamIdx}`;
       anchorParams.push(provenance);
+    } else if (provenance === 'all') {
+      // EXCLUDE quarantine from general search
+      anchorQuery += ` AND a.provenance != 'quarantine'`;
+    } else if (provenance === 'quarantine') {
+      anchorQuery += ` AND a.provenance = 'quarantine'`;
     }
 
     // Add bucket and tag filters
@@ -319,12 +340,19 @@ export async function tagWalkerSearch(
 
     const limitParamIdx = anchorParams.length + 1;
 
-    // Check for chronological sort intent
-    const isEarliest = sanitizedQuery.toLowerCase().includes('earliest') ||
-      sanitizedQuery.toLowerCase().includes('oldest') ||
-      sanitizedQuery.toLowerCase().includes('first');
+    // Check for chronological sort intent - enhanced to detect year ranges
+    const queryLower = sanitizedQuery.toLowerCase();
+    const isEarliest = queryLower.includes('earliest') ||
+      queryLower.includes('oldest') ||
+      queryLower.includes('first');
 
-    if (isEarliest) {
+    // Check for temporal range queries (e.g., "from 2025 to 2026")
+    const hasTemporalRange = /\b(from|between)\s+\d{4}\s+(to|and)\s+\d{4}\b/.test(queryLower);
+
+    if (hasTemporalRange) {
+      // For temporal range queries, sort by timestamp to show chronological spread
+      anchorQuery += ` ORDER BY a.timestamp ASC LIMIT $${limitParamIdx}`;
+    } else if (isEarliest) {
       anchorQuery += ` ORDER BY a.timestamp ASC LIMIT $${limitParamIdx}`;
     } else {
       anchorQuery += ` ORDER BY score DESC, a.timestamp DESC LIMIT $${limitParamIdx}`;
@@ -387,6 +415,8 @@ export async function tagWalkerSearch(
       const provParamIdx = walkParams.length + 1;
       walkQuery += ` AND a.provenance = $${provParamIdx}`;
       walkParams.push(provenance);
+    } else if (provenance === 'all') {
+      walkQuery += ` AND a.provenance != 'quarantine'`;
     } else if (provenance === 'quarantine') {
       walkQuery += ` AND a.provenance = 'quarantine'`;
     }
@@ -409,8 +439,25 @@ export async function tagWalkerSearch(
       walkParams.push(buckets);
     }
 
+    // Apply temporal range filtering to walk results if needed
+    if (hasTemporalRange) {
+      const yearMatches = queryLower.match(/\b(202[0-9]|203[0-9])\b/g);
+      if (yearMatches && yearMatches.length >= 2) {
+        const startYear = Math.min(...yearMatches.map(Number));
+        const endYear = Math.max(...yearMatches.map(Number));
+        const yearParamIdx = walkParams.length + 1;
+        walkQuery += ` AND EXTRACT(YEAR FROM TO_TIMESTAMP(a.timestamp)) BETWEEN $${yearParamIdx} AND $${yearParamIdx + 1}`;
+        walkParams.push(startYear, endYear);
+      }
+    }
+
     const walkLimitParamIdx = walkParams.length + 1;
-    walkQuery += ` LIMIT $${walkLimitParamIdx}`;
+    if (hasTemporalRange) {
+      // For temporal range queries, sort walk results by timestamp to maintain chronological spread
+      walkQuery += ` ORDER BY a.timestamp ASC LIMIT $${walkLimitParamIdx}`;
+    } else {
+      walkQuery += ` LIMIT $${walkLimitParamIdx}`;
+    }
     walkParams.push(walkLimit);
 
     const walkResult = await db.run(walkQuery, walkParams);
@@ -640,8 +687,16 @@ export async function executeSearch(
     console.log(`[Search] NLP Parsed Query: "${cleanQuery}" -> "${parsedQuery}"`);
   }
 
+  // Apply Deterministic Semantic Expansion (Synonym Ring)
+  const parsedWords = parsedQuery.split(/\s+/).filter((w: string) => w.length > 2);
+  const semanticExpandedTerms = isExpansionReady() ? semanticExpand(parsedWords) : parsedWords;
+  const semanticExpandedQuery = semanticExpandedTerms.join(' ');
+  if (semanticExpandedQuery !== parsedQuery) {
+    console.log(`[Search] Semantic Expansion: "${parsedQuery}" -> "${semanticExpandedQuery}"`);
+  }
+
   const expansionTags = await expandQuery(cleanQuery);
-  const expandedQuery = expansionTags.length > 0 ? `${parsedQuery} ${expansionTags.join(' ')}` : parsedQuery;
+  const expandedQuery = expansionTags.length > 0 ? `${semanticExpandedQuery} ${expansionTags.join(' ')}` : semanticExpandedQuery;
   console.log(`[Search] Optimized Query: ${expandedQuery}`);
 
   // 1. ENGRAM LOOKUP
@@ -651,12 +706,27 @@ export async function executeSearch(
 
   // Active Cleansing: Track existing SimHashes
   const includedHashes: string[] = [];
+  // Track frequency of content occurrences
+  const hashFrequencyMap = new Map<string, number>();
   const SIMHASH_THRESHOLD = 3; // Standard 074: < 3 bits difference = duplicate
 
+
   if (engramResults.length > 0) {
-    console.log(`[Search] Found ${engramResults.length} via Engram: ${cleanQuery}`);
-    const engramContextQuery = `SELECT id, content, source_path as source, timestamp, buckets, tags, epochs, provenance, simhash FROM atoms WHERE id = ANY($1)`;
-    const engramContentResult = await db.run(engramContextQuery, [engramResults]);
+    console.log(`[Search] Found ${engramResults.length} via Engram lookup.`);
+
+    let engramContextQuery = `SELECT id, content, source_path as source, timestamp, buckets, tags, epochs, provenance, simhash FROM atoms WHERE id = ANY($1)`;
+    const engramParams: any[] = [engramResults];
+
+    if (provenance !== 'all' && provenance !== 'quarantine') {
+      engramContextQuery += ` AND provenance = $2`;
+      engramParams.push(provenance);
+    } else if (provenance === 'all') {
+      engramContextQuery += ` AND provenance != 'quarantine'`;
+    } else if (provenance === 'quarantine') {
+      engramContextQuery += ` AND provenance = 'quarantine'`;
+    }
+
+    const engramContentResult = await db.run(engramContextQuery, engramParams);
     if (engramContentResult.rows) {
       const realBucketsArray = Array.from(realBuckets);
       engramContentResult.rows.forEach((row: any[]) => {
@@ -691,6 +761,7 @@ export async function executeSearch(
             // Active Cleansing
             const simhash = row[8] || "0";
             let isDuplicate = false;
+            let existingItem: SearchResult | undefined;
 
             if (simhash !== "0") {
               for (const existingHash of includedHashes) {
@@ -699,12 +770,16 @@ export async function executeSearch(
 
                   // --- MERGE TAGS (Directive 3) ---
                   // Find the existing item and merge tags/buckets
-                  const existingItem = finalResults.find(r => r.molecular_signature === existingHash);
+                  existingItem = finalResults.find(r => r.molecular_signature === existingHash);
                   if (existingItem) {
                     const mergedTags = new Set([...existingItem.tags, ...rowTags]);
                     const mergedBuckets = new Set([...getItems(existingItem.buckets), ...rowBuckets]);
                     existingItem.tags = Array.from(mergedTags);
                     existingItem.buckets = Array.from(mergedBuckets);
+                    // Update frequency count
+                    const currentFreq = hashFrequencyMap.get(existingHash) || 1;
+                    hashFrequencyMap.set(existingHash, currentFreq + 1);
+                    existingItem.frequency = currentFreq + 1;
                     // console.log(`[Search] Merged tags for duplicate atom: ${row[0]} -> ${existingItem.id}`);
                   }
                   break;
@@ -713,7 +788,7 @@ export async function executeSearch(
             }
 
             if (!isDuplicate) {
-              finalResults.push({
+              const newItem: SearchResult = {
                 id: row[0],
                 content: row[1],
                 source: row[2],
@@ -724,12 +799,24 @@ export async function executeSearch(
                 provenance: row[7],
                 score: score,
                 molecular_signature: simhash,
+                frequency: 1, // Initialize frequency to 1 for new items
                 // Add semantic information
                 semanticCategories: semanticCategories,
                 relatedEntities: hasEntityPair ? entityPairs : undefined
-              });
+              };
+
+              // Initialize frequency to 1 for new items
+              if (simhash !== "0") {
+                hashFrequencyMap.set(simhash, 1);
+              }
+
+              finalResults.push(newItem);
               includedIds.add(row[0]);
               if (simhash !== "0") includedHashes.push(simhash);
+            } else if (existingItem) {
+              // Update the existing item's frequency if we found a duplicate during merge
+              const currentFreq = hashFrequencyMap.get(simhash) || 1;
+              existingItem.frequency = currentFreq;
             }
           }
         }
@@ -738,13 +825,15 @@ export async function executeSearch(
   }
 
   // 2. TAG-WALKER SEARCH (Hybrid FTS + Graph)
-  let walkerResults = await tagWalkerSearch(cleanQuery, Array.from(realBuckets), scopeTags, maxChars, provenance, filters); // Clean query is better for FTS than expanded
+  // Use parsedQuery (NLP-processed) for better FTS recall - removes stopwords and extracts meaningful terms
+  let walkerResults = await tagWalkerSearch(parsedQuery, Array.from(realBuckets), scopeTags, maxChars, provenance, filters);
 
   // --- FUZZY FALLBACK (Standard 093) ---
   // If strict AND-search returns 0 results, retry with OR-logic
+  // CRITICAL: Use parsedQuery (not cleanQuery) to prevent stopwords from polluting fuzzy OR search
   if ((engramResults.length === 0 && walkerResults.length === 0) || (walkerResults.length === 0 && finalResults.length === 0)) {
-    console.log(`[Search] Strict search returned 0 results. Triggering Fuzzy Fallback for: "${cleanQuery}"`);
-    walkerResults = await tagWalkerSearch(cleanQuery, Array.from(realBuckets), scopeTags, maxChars, provenance, filters, true); // Fuzzy = true
+    console.log(`[Search] Strict search returned 0 results. Triggering Fuzzy Fallback for: "${parsedQuery}" (parsed from: "${cleanQuery}")`);
+    walkerResults = await tagWalkerSearch(parsedQuery, Array.from(realBuckets), scopeTags, maxChars, provenance, filters, true); // Fuzzy = true
   }
 
   // Type-Based Scoring Multipliers (POML V4)
@@ -799,6 +888,7 @@ export async function executeSearch(
       // Active Cleansing Check
       let isDuplicate = false;
       const simhash = r.molecular_signature || "0";
+      let existingItem: SearchResult | undefined;
 
       if (simhash !== "0") {
         for (const existingHash of includedHashes) {
@@ -806,12 +896,16 @@ export async function executeSearch(
             isDuplicate = true;
 
             // --- MERGE TAGS (Directive 3) ---
-            const existingItem = finalResults.find(r => r.molecular_signature === existingHash);
+            existingItem = finalResults.find(r => r.molecular_signature === existingHash);
             if (existingItem) {
               const mergedTags = new Set([...existingItem.tags, ...(r.tags || [])]);
               const mergedBuckets = new Set([...getItems(existingItem.buckets), ...getItems(r.buckets)]);
               existingItem.tags = Array.from(mergedTags);
               existingItem.buckets = Array.from(mergedBuckets);
+              // Update frequency count
+              const currentFreq = hashFrequencyMap.get(existingHash) || 1;
+              hashFrequencyMap.set(existingHash, currentFreq + 1);
+              existingItem.frequency = currentFreq + 1;
             }
             break;
           }
@@ -819,15 +913,27 @@ export async function executeSearch(
       }
 
       if (!isDuplicate) {
-        finalResults.push({
+        const newItem: SearchResult = {
           ...r,
           score,
+          frequency: 1, // Initialize frequency to 1 for new items
           // Add semantic information
           semanticCategories: semanticCategories,
           relatedEntities: entityPairs.length > 0 ? entityPairs : undefined
-        });
+        };
+
+        // Initialize frequency to 1 for new items
+        if (simhash !== "0") {
+          hashFrequencyMap.set(simhash, 1);
+        }
+
+        finalResults.push(newItem);
         includedIds.add(r.id);
         if (simhash !== "0") includedHashes.push(simhash);
+      } else if (existingItem) {
+        // Update the existing item's frequency if we found a duplicate during merge
+        const currentFreq = hashFrequencyMap.get(simhash) || 1;
+        existingItem.frequency = currentFreq;
       }
     }
   });
@@ -839,13 +945,157 @@ export async function executeSearch(
 
   // 3. CONTEXT INFLATION (Standard 085)
   // Inflate separate molecules into coherent windows
-  const inflatedResults = await ContextInflator.inflate(finalResults);
+  const inflatedResults = await ContextInflator.inflate(finalResults, maxChars);
 
   console.log(`[Search] Inflated ${finalResults.length} atoms into ${inflatedResults.length} context windows.`);
+
+  // If the inflated results don't fill the token budget, continue expanding with less directly connected data
+  let totalChars = inflatedResults.reduce((sum, result) => sum + (result.content?.length || 0), 0);
+  if (totalChars < maxChars && maxChars > 0) {
+    console.log(`[Search] Current results (${totalChars} chars) don't fill budget (${maxChars} chars). Attempting to expand with less directly connected data...`);
+
+    // Calculate how many more characters we need
+    const remainingChars = maxChars - totalChars;
+
+    // Get additional related content to fill the budget
+    const additionalResults = await getAdditionalRelatedContent(query, remainingChars, finalResults);
+
+    if (additionalResults.length > 0) {
+      // Add additional results to fill the remaining budget
+      inflatedResults.push(...additionalResults);
+
+      // Update total character count
+      totalChars = inflatedResults.reduce((sum, result) => sum + (result.content?.length || 0), 0);
+
+      // Sort by score to prioritize the most relevant content
+      inflatedResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+    }
+  }
 
   const result = await formatResults(inflatedResults, maxChars);
   console.log(`[Search] Search completed in ${Date.now() - startTime}ms`);
   return result;
+}
+
+/**
+ * Get additional related content to fill the token budget with less directly connected but still relevant data
+ */
+async function getAdditionalRelatedContent(query: string, remainingChars: number, existingResults: SearchResult[]): Promise<SearchResult[]> {
+  if (remainingChars <= 0) return [];
+
+  // Extract tags and buckets from existing results to find related content
+  const allTags = new Set<string>();
+  const allBuckets = new Set<string>();
+
+  for (const result of existingResults) {
+    if (result.tags) {
+      result.tags.forEach(tag => allTags.add(tag));
+    }
+    if (result.buckets) {
+      result.buckets.forEach(bucket => allBuckets.add(bucket));
+    }
+  }
+
+  // Convert sets to arrays for use in queries
+  const tagsArray = Array.from(allTags);
+  const bucketsArray = Array.from(allBuckets);
+
+  // Query for related content that shares tags or buckets but wasn't in the original results
+  let querySql = `
+      SELECT a.id, a.content, a.source_path as source, a.timestamp, 
+             a.buckets, a.tags, a.epochs, a.provenance, a.simhash as molecular_signature,
+             50 as score  -- Lower score for less directly connected content
+      FROM atoms a
+      WHERE `;
+
+  const params: any[] = [];
+  let conditions: string[] = [];
+
+  // Add conditions for tags if we have any
+  if (tagsArray.length > 0) {
+    conditions.push(`EXISTS (
+        SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${params.length + 1})
+    )`);
+    params.push(tagsArray);
+  }
+
+  // Add conditions for buckets if we have any
+  if (bucketsArray.length > 0) {
+    conditions.push(`EXISTS (
+        SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${params.length + 1})
+    )`);
+    params.push(bucketsArray);
+  }
+
+  // Combine conditions with OR (so we get content that matches either tags OR buckets)
+  if (conditions.length > 0) {
+    querySql += `(${conditions.join(' OR ')})`;
+  } else {
+    // If no tags or buckets to match, just get some random content
+    querySql += `TRUE`;
+  }
+
+  // Exclude original results
+  if (existingResults.length > 0) {
+    const originalIds = existingResults.map(r => r.id);
+    querySql += ` AND a.id != ALL($${params.length + 1})`;
+    params.push(originalIds);
+  }
+
+  // Limit to avoid fetching too much
+  querySql += ` ORDER BY a.timestamp DESC LIMIT 50`;
+
+  try {
+    const result = await db.run(querySql, params);
+    if (!result.rows) return [];
+
+    // Convert rows to SearchResult objects
+    const additionalResults: SearchResult[] = result.rows.map((row: any[]) => ({
+      id: row[0],
+      content: row[1],
+      source: row[2],
+      timestamp: row[3],
+      buckets: row[4],
+      tags: row[5],
+      epochs: row[6],
+      provenance: row[7],
+      molecular_signature: row[8],
+      score: row[9] || 50, // Default score if not provided
+      is_inflated: true
+    }));
+
+    // Further filter and truncate content to fit the remaining budget
+    let totalChars = 0;
+    const filteredResults: SearchResult[] = [];
+
+    for (const result of additionalResults) {
+      if (!result.content) continue;
+
+      const availableSpace = remainingChars - totalChars;
+      if (availableSpace <= 0) break;
+
+      if (result.content.length <= availableSpace) {
+        // If the content fits entirely, add it
+        filteredResults.push(result);
+        totalChars += result.content.length;
+      } else {
+        // If the content is too large, truncate it to fit
+        const truncatedContent = result.content.substring(0, availableSpace);
+        filteredResults.push({
+          ...result,
+          content: truncatedContent
+        });
+        totalChars += truncatedContent.length;
+        break; // Budget is filled
+      }
+    }
+
+    console.log(`[Search] Fetched ${filteredResults.length} additional results to fill budget`);
+    return filteredResults;
+  } catch (e) {
+    console.error(`[Search] Failed to fetch additional related content:`, e);
+    return [];
+  }
 }
 
 /**
@@ -963,6 +1213,11 @@ async function formatResults(results: SearchResult[], maxChars: number): Promise
     // Extract molecular slices when coordinates are available
     const candidates = await Promise.all(results.map(async r => {
       let content = r.content || '';
+
+      // Include frequency information in the content if available
+      if (r.frequency && r.frequency > 1) {
+        content = `[Found ${r.frequency} times] ${content}`;
+      }
 
       // Use molecular coordinates for precise slicing if available, but skip if already inflated
       if (!r.is_inflated && r.compound_id && r.start_byte !== undefined && r.end_byte !== undefined && r.start_byte >= 0 && r.end_byte > r.start_byte) {
@@ -1210,7 +1465,7 @@ export async function smartChatSearch(
   parallelResults.forEach((res) => {
     res.results.forEach(r => {
       if (!mergedMap.has(r.id)) {
-        // Boost score slightly for multi-path discovery? 
+        // Boost score slightly for multi-path discovery?
         // Or keep as is.
         mergedMap.set(r.id, r);
       }
@@ -1267,7 +1522,7 @@ export async function getBrightNodes(
   const searchResults = await tagWalkerSearch(query, buckets, [], maxNodes * 1000, 'all');
 
   if (searchResults.length === 0) {
-    console.log('[BrightNode] No initial results found, returning empty set');
+    console.log('[BrightNode] No results found for query.');
     return [];
   }
 

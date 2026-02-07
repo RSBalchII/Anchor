@@ -126,10 +126,14 @@ export const SearchColumn = memo(({
 
                 // [Consistency] Re-generate Context String to match Agent's view (~500 chars/item, ~8000 chars total)
                 let currentLength = 0;
-                const MAX_CONTEXT_CHARS = 8000;
+                // Dynamic Context Limit based on user slider (approx 4-6 chars per token)
+                // Reduced from *8 to *4.5 to align closer with actual token expectations
+                const MAX_CONTEXT_CHARS = Math.max(8192, tokenBudget * 4.5);
                 const formattedContextEntries = sortedResults.map((r: any) => {
                     if (currentLength >= MAX_CONTEXT_CHARS) return null;
-                    const contentSnippet = r.content.substring(0, 500);
+                    // Dynamic snippet size: Allow up to 40% of the budget per item to fill the space
+                    const maxSnippetChars = Math.max(2000, Math.floor(MAX_CONTEXT_CHARS * 0.4));
+                    const contentSnippet = r.content.substring(0, maxSnippetChars);
                     const dateStr = r.timestamp ? new Date(r.timestamp).toISOString() : 'unknown';
                     const entry = `- [${dateStr}] ${contentSnippet}...`;
                     if (currentLength + entry.length > MAX_CONTEXT_CHARS) return null;

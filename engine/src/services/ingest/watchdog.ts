@@ -114,7 +114,11 @@ async function processFile(filePath: string, event: string) {
             provenance = 'internal';
         }
 
-        const topology = await atomizer.atomize(content, relativePath, provenance);
+        // Get the file's modification time to use as the base timestamp
+        const stats = await fs.promises.stat(filePath);
+        const fileTimestamp = stats.mtime.getTime(); // Use file modification time
+
+        const topology = await atomizer.atomize(content, relativePath, provenance, fileTimestamp);
 
         // 4. CLEANUP (Full Refresh Strategy)
         // Find existing chunks for this file and wipe them to prevent ghosts

@@ -14,183 +14,207 @@ interface ContextWindow {
 
 export class ContextInflator {
 
-    // Default Config (fallback if no budget provided)
-    private static DEFAULT_PADDING = 200;
-    private static DEFAULT_MAX_WINDOW = 2500;
-
-    // Dynamic Density Constraints
-    private static MIN_PADDING = 50;      // <50>search<50> (High density)
-    private static MAX_PADDING = 500;     // Very generous context (Low density)
-    private static MIN_WINDOW_CAP = 150;  // Absolute floor (roughly 50pad + 50content + 50pad)
-    private static MERGE_THRESHOLD = 500;
-
     /**
      * Inflate search results into expanded Context Windows.
      * Supports "Dynamic Density": Scales window size based on available budget and result count.
      * READS FROM DISK (File System) instead of DB for content.
      */
     static async inflate(results: SearchResult[], totalBudget?: number): Promise<SearchResult[]> {
-        const inflatedResults: SearchResult[] = [];
-        let processingResults = [...results];
-
         if (results.length === 0) return [];
 
-        // --- Calculate Dynamic Parameters ---
-        let paddingChars = ContextInflator.DEFAULT_PADDING;
-        let maxWindowSize = ContextInflator.DEFAULT_MAX_WINDOW;
-
-        if (totalBudget && totalBudget > 0) {
-            // 1. Check if we can fit everyone at Minimum Viability
-            const minViableTotal = processingResults.length * ContextInflator.MIN_WINDOW_CAP;
-
-            if (minViableTotal > totalBudget) {
-                // Too many results! We must truncate the list to ensuring quality > 0.
-                const safeCount = Math.floor(totalBudget / ContextInflator.MIN_WINDOW_CAP);
-                console.log(`[ContextInflator] Budget squeeze! Truncating results from ${processingResults.length} to ${safeCount} to maintain min density.`);
-                processingResults = processingResults.slice(0, safeCount);
-
-                // Set params to minimum floor
-                maxWindowSize = ContextInflator.MIN_WINDOW_CAP;
-                paddingChars = ContextInflator.MIN_PADDING;
-            } else {
-                // We can fit everyone! Distribute budget.
-                const budgetPerResult = Math.floor(totalBudget / processingResults.length);
-
-                // Scale window size to available budget (capped at reasonable max to avoid massive single files)
-                maxWindowSize = Math.max(ContextInflator.MIN_WINDOW_CAP, budgetPerResult);
-
-                // Deduce padding
-                const targetPadding = Math.floor((maxWindowSize - 50) / 2);
-                paddingChars = Math.min(ContextInflator.MAX_PADDING, Math.max(ContextInflator.MIN_PADDING, targetPadding));
-
-                console.log(`[ContextInflator] Dynamic Density: Fitting all ${processingResults.length} results. Budget/Item=${budgetPerResult}. Params: Pad=${paddingChars}, MaxWin=${maxWindowSize}`);
-            }
-        } else {
-            console.log(`[ContextInflator] Using default static parameters.`);
-        }
-
-        // --- Standard Inflation Logic (using dynamic params) ---
-        // Group by Source (File Path) instead of Compound ID to ensure we read from correct file
-        const fileMap = new Map<string, SearchResult[]>();
-
-        for (const res of processingResults) {
+        // Process each result to potentially expand content from disk
+        const processedResults: SearchResult[] = [];
+        
+        for (const res of results) {
             if (!res.source || res.start_byte === undefined || res.end_byte === undefined) {
-                inflatedResults.push(res);
+                // If no file coordinates, use the result as-is
+                processedResults.push(res);
                 continue;
             }
-            if (!fileMap.has(res.source)) {
-                fileMap.set(res.source, []);
-            }
-            fileMap.get(res.source)?.push(res);
-        }
 
-        // 2. Process each File
-        for (const [sourcePath, fileResults] of fileMap.entries()) {
-            fileResults.sort((a, b) => (a.start_byte || 0) - (b.start_byte || 0));
+            try {
+                // Read from Disk
+                let filePath = res.source;
 
-            const windows: ContextWindow[] = [];
-            let currentWindow: ContextWindow | null = null;
-
-            for (const res of fileResults) {
-                const rStart = Number(res.start_byte) || 0;
-                const rEnd = Number(res.end_byte) || 0;
-
-                const start = Math.max(0, rStart - paddingChars);
-                let end = rEnd + paddingChars;
-
-                // FORCE CAP: Ensure no single window exceeds MAX_WINDOW_SIZE
-                if ((end - start) > maxWindowSize) {
-                    end = start + maxWindowSize;
+                // Skip inflation for virtual sources
+                if (filePath === 'atom_source' || filePath === 'internal' || filePath === 'memory') {
+                    processedResults.push(res);
+                    continue;
                 }
 
-                if (!currentWindow) {
-                    currentWindow = {
-                        compoundId: res.compound_id || '',
-                        source: sourcePath,
-                        start,
-                        end,
-                        originalResults: [res]
-                    };
+                if (!path.isAbsolute(filePath)) {
+                    // Resolve relative path against Notebook Directory
+                    filePath = path.join(pathManager.getNotebookDir(), filePath);
+                }
+
+                // Read the content from the file
+                const fileContent = await fs.readFile(filePath, 'utf-8');
+                
+                // Extract the specific content based on byte coordinates
+                const start = Math.max(0, res.start_byte);
+                const end = res.end_byte || fileContent.length;
+                const extractedContent = fileContent.substring(start, end);
+
+                // Create a new result with expanded content
+                const expandedResult: SearchResult = {
+                    ...res,
+                    content: `...${extractedContent}...`,
+                    is_inflated: true
+                };
+
+                processedResults.push(expandedResult);
+            } catch (e) {
+                console.error(`[ContextInflator] Failed to inflate result for ${res.source}`, e);
+                // On error, use the original result
+                processedResults.push(res);
+            }
+        }
+
+        // If we have a total budget and our current results don't fill it, try to expand with less directly connected data
+        if (totalBudget && totalBudget > 0) {
+            const currentCharCount = processedResults.reduce((sum, result) => sum + (result.content?.length || 0), 0);
+
+            if (currentCharCount < totalBudget) {
+                console.log(`[ContextInflator] Current results (${currentCharCount} chars) don't fill budget (${totalBudget} chars). Attempting to expand with less directly connected data...`);
+
+                // Fetch additional related content to fill the budget
+                const additionalResults = await this.fetchAdditionalContext(processedResults, totalBudget - currentCharCount);
+
+                if (additionalResults.length > 0) {
+                    // Add additional results to fill the remaining budget
+                    processedResults.push(...additionalResults);
+
+                    // Sort by score to prioritize the most relevant content
+                    processedResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+                }
+            }
+        }
+
+        return processedResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+    }
+
+    /**
+     * Fetch additional context to fill the token budget with less directly connected but still relevant data
+     */
+    private static async fetchAdditionalContext(baseResults: SearchResult[], remainingBudget: number): Promise<SearchResult[]> {
+        if (remainingBudget <= 0) return [];
+
+        // Extract tags and buckets from base results to find related content
+        const allTags = new Set<string>();
+        const allBuckets = new Set<string>();
+
+        for (const result of baseResults) {
+            if (result.tags) {
+                result.tags.forEach(tag => allTags.add(tag));
+            }
+            if (result.buckets) {
+                result.buckets.forEach(bucket => allBuckets.add(bucket));
+            }
+        }
+
+        // Convert sets to arrays for use in queries
+        const tagsArray = Array.from(allTags);
+        const bucketsArray = Array.from(allBuckets);
+
+        // Query for related content that shares tags or buckets but wasn't in the original results
+        let query = `
+            SELECT id, content, source_path as source, timestamp,
+                   buckets, tags, epochs, provenance, simhash as molecular_signature,
+                   100 as score  -- Lower score for less directly connected content
+            FROM atoms
+            WHERE `;
+
+        const params: any[] = [];
+        const conditions: string[] = [];
+
+        // Add conditions for tags if we have any
+        if (tagsArray.length > 0) {
+            conditions.push(`EXISTS (
+                SELECT 1 FROM unnest(tags) as tag WHERE tag = ANY($${params.length + 1})
+            )`);
+            params.push(tagsArray);
+        }
+
+        // Add conditions for buckets if we have any
+        if (bucketsArray.length > 0) {
+            const bucketParamIndex = params.length + 1;
+            conditions.push(`EXISTS (
+                SELECT 1 FROM unnest(buckets) as bucket WHERE bucket = ANY($${bucketParamIndex})
+            )`);
+            params.push(bucketsArray);
+        }
+
+        // Combine conditions with OR (so we get content that matches either tags OR buckets)
+        let queryConditions = '';
+        if (conditions.length > 0) {
+            queryConditions = `(${conditions.join(' OR ')})`;
+        } else {
+            // If no tags or buckets to match, just get some random content
+            queryConditions = 'TRUE';
+        }
+
+        // Exclude original results
+        const originalIds = baseResults.map(r => r.id);
+        let fullQuery = query + queryConditions;
+        if (originalIds.length > 0) {
+            const excludeParamIndex = params.length + 1;
+            fullQuery += ` AND id != ALL($${excludeParamIndex})`;
+            params.push(originalIds);
+        }
+
+        // Limit to avoid fetching too much
+        fullQuery += ` ORDER BY timestamp DESC LIMIT 20`;
+
+        try {
+            const result = await db.run(fullQuery, params);
+            if (!result.rows) return [];
+
+            // Convert rows to SearchResult objects
+            const additionalResults: SearchResult[] = result.rows.map((row: any[]) => ({
+                id: row[0],
+                content: row[1],
+                source: row[2],
+                timestamp: row[3],
+                buckets: row[4],
+                tags: row[5],
+                epochs: row[6],
+                provenance: row[7],
+                molecular_signature: row[8],
+                score: row[9] || 100, // Default score if not provided
+                is_inflated: true
+            }));
+
+            // Further filter and truncate content to fit the remaining budget
+            let totalChars = 0;
+            const filteredResults: SearchResult[] = [];
+
+            for (const result of additionalResults) {
+                if (!result.content) continue;
+
+                const availableSpace = remainingBudget - totalChars;
+                if (availableSpace <= 0) break;
+
+                if (result.content.length <= availableSpace) {
+                    // If the content fits entirely, add it
+                    filteredResults.push(result);
+                    totalChars += result.content.length;
                 } else {
-                    const potentialEnd = Math.max(currentWindow.end, end);
-                    const potentialSize = potentialEnd - currentWindow.start;
-
-                    if (start <= (currentWindow.end + ContextInflator.MERGE_THRESHOLD) && potentialSize <= maxWindowSize) {
-                        currentWindow.end = potentialEnd;
-                        currentWindow.originalResults.push(res);
-                    } else {
-                        windows.push(currentWindow);
-                        currentWindow = {
-                            compoundId: res.compound_id || '',
-                            source: sourcePath,
-                            start,
-                            end,
-                            originalResults: [res]
-                        };
-                    }
+                    // If the content is too large, truncate it to fit
+                    const truncatedContent = result.content.substring(0, availableSpace);
+                    filteredResults.push({
+                        ...result,
+                        content: truncatedContent
+                    });
+                    totalChars += truncatedContent.length;
+                    break; // Budget is filled
                 }
             }
-            if (currentWindow) windows.push(currentWindow);
 
-            // 3. Fetch Content for Windows from DISK
-            for (const win of windows) {
-                try {
-                    const safeStart = Math.max(0, win.start);
-                    // Cap fetch size for sanity
-                    const requestedLength = Math.min(maxWindowSize, win.end - safeStart);
-
-                    let expandedContent = "";
-
-                    // Read from Disk
-                    let filePath = win.source;
-
-                    // Skip inflation for virtual sources
-                    if (filePath === 'atom_source' || filePath === 'internal' || filePath === 'memory') {
-                        // console.log(`[ContextInflator] Skipping virtual source: ${filePath}`);
-                        inflatedResults.push(...win.originalResults);
-                        continue;
-                    }
-
-                    if (!path.isAbsolute(filePath)) {
-                        // Resolve relative path against Notebook Directory
-                        filePath = path.join(pathManager.getNotebookDir(), filePath);
-                    }
-
-                    const fileHandle = await fs.open(filePath, 'r');
-                    try {
-                        const buffer = Buffer.alloc(requestedLength);
-                        const { bytesRead } = await fileHandle.read(buffer, 0, requestedLength, safeStart);
-                        if (bytesRead > 0) {
-                            expandedContent = buffer.toString('utf-8', 0, bytesRead);
-                        }
-                    } finally {
-                        await fileHandle.close();
-                    }
-
-                    if (expandedContent && expandedContent.length > 0) {
-                        const safeEnd = safeStart + expandedContent.length;
-                        const base = win.originalResults[0];
-                        inflatedResults.push({
-                            ...base,
-                            content: `...${expandedContent}...`,
-                            score: Math.max(...win.originalResults.map(r => r.score)),
-                            is_inflated: true,
-                            start_byte: safeStart,
-                            end_byte: safeEnd,
-                            compound_id: win.compoundId
-                        });
-                    } else {
-                        // Fallback
-                        inflatedResults.push(...win.originalResults);
-                    }
-                } catch (e) {
-                    console.error(`[ContextInflator] Failed to inflate window for ${win.source}`, e);
-                    // On error, use the original content (even if empty/partial)
-                    inflatedResults.push(...win.originalResults);
-                }
-            }
+            console.log(`[ContextInflator] Fetched ${filteredResults.length} additional results to fill budget`);
+            return filteredResults;
+        } catch (e) {
+            console.error(`[ContextInflator] Failed to fetch additional context:`, e);
+            return [];
         }
-
-        return inflatedResults.sort((a, b) => b.score - a.score);
     }
 }

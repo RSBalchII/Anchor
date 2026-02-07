@@ -1,0 +1,15 @@
+{
+  "name": "@anchor/native-atomizer",
+  "version": "1.0.0",
+  "description": "High-performance C++ text splitter for Node.js - prose and code aware chunking",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "test": "node test.js"
+  },
+  "keywords": ["text", "splitter", "chunking", "native", "cpp", "llm", "rag"],
+  "author": "Robert Balch II",
+  "license": "Elastic-2.0",
+  "gypfile": true
+}

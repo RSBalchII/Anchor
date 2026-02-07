@@ -20,7 +20,8 @@ export class AtomizerService {
     async atomize(
         content: string,
         sourcePath: string,
-        provenance: 'internal' | 'external'
+        provenance: 'internal' | 'external',
+        fileTimestamp?: number
     ): Promise<{ compound: Compound, molecules: Molecule[], atoms: Atom[] }> {
 
         try {
@@ -43,7 +44,7 @@ export class AtomizerService {
 
             // 2. Identification (Hash)
             const compoundId = crypto.createHash('md5').update(cleanContent + sourcePath).digest('hex');
-            const timestamp = Date.now();
+            const timestamp = fileTimestamp || Date.now();
 
             // 3. System Atoms (Project/File Level)
             const systemAtoms = this.extractSystemAtoms(sourcePath);
@@ -127,7 +128,7 @@ export class AtomizerService {
                     numeric_value: numericVal,
                     numeric_unit: numericUnit,
                     molecular_signature: this.generateSimHash(text),
-                    timestamp: currentTimestamp // Assign context-aware timestamp
+                    timestamp: partTimestamp || currentTimestamp // Use part-specific timestamp if available, otherwise context-aware timestamp
                 });
             }
 
@@ -139,7 +140,7 @@ export class AtomizerService {
                 molecules: molecules.map(m => m.id),
                 atoms: allAtoms.map(a => a.id),
                 path: sourcePath,
-                timestamp: timestamp, // Compound keeps file timestamp
+                timestamp: fileTimestamp || timestamp, // Compound keeps file timestamp if provided
                 provenance: provenance,
                 molecular_signature: this.generateSimHash(cleanContent)
             };
@@ -401,11 +402,52 @@ export class AtomizerService {
         const extractTimestamp = (chunk: string): number | undefined => {
             // Match ISO timestamps: 2026-01-25T03:43:54.405Z or 2026-01-25 03:43:54
             const isoRegex = /\b(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)\b/;
-            const match = chunk.match(isoRegex);
+            let match = chunk.match(isoRegex);
             if (match) {
                 const ts = Date.parse(match[1]);
                 if (!isNaN(ts)) return ts;
             }
+
+            // Match YYYY-MM-DD format (without time)
+            const dateRegex = /\b(20[2-9]\d-\d{2}-\d{2})\b/;
+            match = chunk.match(dateRegex);
+            if (match) {
+                const ts = Date.parse(match[1]);
+                if (!isNaN(ts)) return ts;
+            }
+
+            // Match MM/DD/YYYY or DD/MM/YYYY format
+            const usDateRegex = /\b(\d{1,2}\/\d{1,2}\/\d{4})\b/;
+            match = chunk.match(usDateRegex);
+            if (match) {
+                const ts = Date.parse(match[1]);
+                if (!isNaN(ts)) return ts;
+            }
+
+            // Match Month DD, YYYY format
+            const monthDayYearRegex = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(\d{4})\b/;
+            match = chunk.match(monthDayYearRegex);
+            if (match) {
+                const [, month, day, year] = match;
+                const monthIndex = ['January', 'February', 'March', 'April', 'May', 'June',
+                                   'July', 'August', 'September', 'October', 'November', 'December']
+                                   .indexOf(month);
+                const date = new Date(parseInt(year), monthIndex, parseInt(day));
+                if (!isNaN(date.getTime())) return date.getTime();
+            }
+
+            // Match DD Month YYYY format
+            const dayMonthYearRegex = /\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/;
+            match = chunk.match(dayMonthYearRegex);
+            if (match) {
+                const [, day, month, year] = match;
+                const monthIndex = ['January', 'February', 'March', 'April', 'May', 'June',
+                                   'July', 'August', 'September', 'October', 'November', 'December']
+                                   .indexOf(month);
+                const date = new Date(parseInt(year), monthIndex, parseInt(day));
+                if (!isNaN(date.getTime())) return date.getTime();
+            }
+
             return undefined;
         };
 

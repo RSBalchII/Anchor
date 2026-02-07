@@ -193,7 +193,8 @@ export async function ingestAtoms(
   atoms: IngestAtom[],
   source: string,
   buckets: string[] = ['core'],
-  tags: string[] = [] // Batch-level tags (e.g., "inbox")
+  tags: string[] = [], // Batch-level tags (e.g., "inbox")
+  fileTimestamp?: number
 ): Promise<number> {
 
   if (atoms.length === 0) return 0;
