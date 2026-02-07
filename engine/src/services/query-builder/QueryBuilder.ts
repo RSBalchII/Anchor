@@ -134,7 +134,9 @@ export class QueryBuilder {
     let sql = 'SELECT ';
     
     if (this.options.selectFields.length > 0) {
-      sql += this.options.selectFields.map(field => this.escapeIdentifier(field)).join(', ');
+      sql += this.options.selectFields
+        .map(field => field === '*' ? '*' : this.escapeIdentifier(field))
+        .join(', ');
     } else {
       sql += '*';
     }
