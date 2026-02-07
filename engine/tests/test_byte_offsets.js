@@ -65,7 +65,7 @@ async function testByteOffsets() {
 
     // Test Case 3: Mixed ASCII and non-ASCII
     console.log('\nTest 3: Mixed ASCII and Non-ASCII');
-    const mixedContent = "ASCII text with émojis 😊 and Çhinese 中文.";
+    const mixedContent = "ASCII text with émojis 😊 and Chinese 中文.";
     const res3 = await atomizer.atomize(mixedContent, 'test_mixed.md', 'internal');
     
     console.log(`Content: "${mixedContent}"`);

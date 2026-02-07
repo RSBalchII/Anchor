@@ -76,9 +76,10 @@ export class QueryBuilder {
 
   /**
    * Escapes an identifier (table/field name) for use in SQL by wrapping it in double quotes
+   * and escaping any internal double quotes by doubling them
    */
   private escapeIdentifier(identifier: string): string {
-    return `"${identifier}"`;
+    return '"' + identifier.replace(/"/g, '""') + '"';
   }
 
   /**
