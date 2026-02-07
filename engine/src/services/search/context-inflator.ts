@@ -23,6 +23,8 @@ export class ContextInflator {
         const processedResults: SearchResult[] = [];
         
         for (const res of results) {
+            // Skip inflation if we don't have the necessary compound coordinates
+            // We need compound_id to fetch the compound_body from the database
             if (!res.compound_id || res.start_byte === undefined || res.end_byte === undefined) {
                 // If no compound coordinates, use the result as-is
                 processedResults.push(res);
@@ -39,16 +41,16 @@ export class ContextInflator {
                 // Fetch the compound_body from the database (same coordinate space as offsets)
                 // The byte offsets were computed on sanitized content, so we must inflate from
                 // the sanitized compound_body, not the raw file content
-                const compoundQuery = `SELECT compound_body FROM compounds WHERE id = $1`;
-                const compoundResult = await db.run(compoundQuery, [res.compound_id]);
+                const query = `SELECT compound_body FROM compounds WHERE id = $1`;
+                const result = await db.run(query, [res.compound_id]);
 
-                if (!compoundResult.rows || compoundResult.rows.length === 0) {
+                if (!result.rows || result.rows.length === 0) {
                     // Fallback to original result if compound not found
                     processedResults.push(res);
                     continue;
                 }
 
-                const compoundBody = compoundResult.rows[0][0] as string;
+                const compoundBody = result.rows[0][0] as string;
                 
                 // Extract the specific content based on byte coordinates
                 // Use Buffer to handle UTF-8 correctly (same as search.ts)
