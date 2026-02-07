@@ -77,8 +77,13 @@ export class QueryBuilder {
   /**
    * Escapes an identifier for safe use in SQL queries
    * Wraps the identifier in double quotes after validation
+   * Note: Identifiers should already be validated by calling methods,
+   * but we validate again for defense in depth.
    */
   private escapeIdentifier(identifier: string): string {
+    // Double-check validation for defense in depth
+    // This prevents SQL injection even if calling code forgets to validate
+    this.validateIdentifier(identifier, 'identifier');
     return `"${identifier}"`;
   }
 
