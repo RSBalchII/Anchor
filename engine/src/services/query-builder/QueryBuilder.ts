@@ -146,9 +146,7 @@ export class QueryBuilder {
 
     let sql = 'SELECT ';
     
-    if (this.options.selectFields.length === 0 ||
-      (this.options.selectFields.length === 1 && this.options.selectFields[0] === '*')
-    ) {
+    if (this.options.selectFields.length === 0) {
       sql += '*';
     } else {
       sql += this.options.selectFields.map(field => `"${field}"`).join(', ');
